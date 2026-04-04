@@ -1,0 +1,74 @@
+# =============================================================================
+# PCAP Analyzer — AI 공급자 설정
+# =============================================================================
+# 이 파일을 편집한 후 /ai-settings/reload 를 POST 하거나
+# 관리 페이지 [설정 저장 & 재로드] 버튼을 누르면 즉시 반영됩니다.
+#
+# ★ API 키는 절대 외부에 노출하지 마세요.
+# =============================================================================
+
+# ── VirusTotal API 설정 ────────────────────────────────────────────────────
+# DNS 쿼리 도메인의 악성 여부 조회에 사용됩니다.
+# 발급: https://www.virustotal.com/gui/my-apikey (무료 가입 후 발급)
+# 무료 플랜 제한: 4 req/분, 500 req/일
+# api_key 를 비워두면 Google Web Risk fallback 또는 타이포스쿼팅 패턴 탐지만 동작합니다.
+virustotal:
+  api_key: ""           # ← 여기에 VirusTotal API 키를 입력하세요
+
+# ── Google Safe Browsing API 설정 (VirusTotal fallback) ───────────────────
+# VirusTotal API 키가 없거나 호출 한도 초과 시 자동으로 사용됩니다.
+# 발급: https://console.cloud.google.com/ → API 및 서비스 → Safe Browsing API 활성화
+# 무료: 10,000 req/일 (Web Risk보다 10배 많음)
+# 탐지 위협 유형: MALWARE(악성코드), SOCIAL_ENGINEERING(피싱/사기),
+#                UNWANTED_SOFTWARE(유해SW), POTENTIALLY_HARMFUL_APPLICATION(유해앱)
+google_safe_browsing:
+  api_key: ""           # ← 여기에 Google Safe Browsing API 키를 입력하세요
+
+# ── 공통 설정 ─────────────────────────────────────────────────────────────────
+confidence_threshold: 60     # 이 값 미만 confidence 는 공격으로 처리 안 함
+max_payloads_per_session: 15  # 세션당 AI 분석 최대 패킷 수
+fallback_on_error: true       # true: 현재 공급자 실패 시 다음 공급자로 자동 전환
+
+# ── AI 공급자 목록 ─────────────────────────────────────────────────────────────
+# priority : 숫자가 낮을수록 먼저 시도 (1이 최우선)
+# enabled  : false 로 설정하면 해당 공급자 건너뜀
+# api_key  : 실제 키 입력 (없으면 "" 또는 null)
+# model    : 비워두면 기본 모델 사용
+# =============================================================================
+
+providers:
+
+  - id: claude
+    label: "Claude (Anthropic)"
+    priority: 1
+    enabled: true
+    api_key: ""          # https://console.anthropic.com/settings/keys
+    model: ""            # 기본: claude-sonnet-4-20250514
+
+  - id: openai
+    label: "ChatGPT (OpenAI)"
+    priority: 2
+    enabled: false
+    api_key: ""          # https://platform.openai.com/api-keys
+    model: "gpt-4o-mini" # 또는 gpt-4o
+
+  - id: deepseek
+    label: "DeepSeek"
+    priority: 3
+    enabled: false
+    api_key: ""          # https://platform.deepseek.com/api_keys
+    model: ""            # 기본: deepseek-chat
+
+  - id: grok
+    label: "Grok (xAI)"
+    priority: 4
+    enabled: false
+    api_key: ""          # https://console.x.ai/
+    model: ""            # 기본: grok-3-mini
+
+  - id: copilot
+    label: "GitHub Copilot"
+    priority: 5
+    enabled: false
+    api_key: ""          # GitHub Personal Access Token (Copilot 권한 필요)
+    model: ""            # 기본: gpt-4o
