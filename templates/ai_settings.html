@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 공급자 설정 — PCAP Analyzer</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'Segoe UI',Arial,sans-serif; background:#0f1923; color:#e0e0e0; min-height:100vh; }
+
+.top-bar {
+  background:linear-gradient(135deg,#0d2137 0%,#1a0d37 100%);
+  padding:14px 28px; display:flex; align-items:center; gap:14px;
+  border-bottom:2px solid #8e44ad;
+}
+.top-bar h1 { font-size:20px; color:#fff; }
+.top-bar .sub { font-size:12px; color:#9b59b6; }
+.top-bar a { color:#7fb3f5; font-size:13px; text-decoration:none; }
+.top-bar .nav { margin-left:auto; display:flex; gap:12px; }
+
+.container { max-width:1100px; margin:0 auto; padding:28px 20px; }
+
+/* 안내 배너 */
+.info-banner {
+  background:#1a1040; border:1px solid #6c3483; border-radius:10px;
+  padding:16px 20px; margin-bottom:24px; font-size:13px; line-height:1.8;
+  color:#d2b4de;
+}
+.info-banner strong { color:#e8daef; }
+.info-banner .chain-arrow {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  margin-top:10px;
+}
+.chain-box {
+  background:#2d1b69; border:1px solid #6c3483; border-radius:6px;
+  padding:5px 12px; font-size:12px; color:#bb8fce; font-family:monospace;
+}
+.chain-arrow span { color:#6c3483; font-size:16px; font-weight:bold; }
+
+/* 공급자 카드 그리드 */
+.provider-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:18px; }
+
+.provider-card {
+  background:#16213e; border:1px solid #1a3a4a; border-radius:12px;
+  padding:20px; position:relative; transition:border-color .2s;
+}
+.provider-card.enabled  { border-color:#27ae60; }
+.provider-card.has-error { border-color:#e74c3c; }
+
+.card-header { display:flex; align-items:flex-start; gap:12px; margin-bottom:14px; }
+.provider-icon {
+  width:42px; height:42px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:20px; flex-shrink:0;
+}
+.icon-claude   { background:#1a3d2a; }
+.icon-openai   { background:#1a2a3d; }
+.icon-deepseek { background:#1a3a1a; }
+.icon-grok     { background:#2a1a3a; }
+.icon-copilot  { background:#1a2d1a; }
+
+.provider-name { font-size:15px; font-weight:bold; color:#fff; margin-bottom:2px; }
+.provider-note { font-size:11px; color:#7f8c8d; line-height:1.5; }
+
+.badge-free { background:#0a3d1a; color:#27ae60; font-size:10px; font-weight:bold;
+              padding:1px 7px; border-radius:3px; margin-left:6px; }
+.badge-paid { background:#1a1a0a; color:#f39c12; font-size:10px; font-weight:bold;
+              padding:1px 7px; border-radius:3px; margin-left:6px; }
+
+/* 폼 요소 */
+.form-row { margin-bottom:12px; }
+.form-label { font-size:11px; color:#95a5a6; margin-bottom:4px; display:block; }
+.form-input {
+  width:100%; padding:8px 10px; background:#0d1923; border:1px solid #2c4a6a;
+  border-radius:6px; color:#e0e0e0; font-size:13px; font-family:monospace; outline:none;
+  transition:border-color .15s;
+}
+.form-input:focus { border-color:#8e44ad; }
+.form-input.key-input { letter-spacing:0.5px; }
+
+.toggle-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.toggle-label { font-size:13px; color:#bdc3c7; }
+.toggle-switch { position:relative; width:46px; height:24px; cursor:pointer; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider {
+  position:absolute; inset:0; background:#2c3e50; border-radius:24px; transition:.3s;
+}
+.toggle-slider:before {
+  content:""; position:absolute; height:18px; width:18px; left:3px; bottom:3px;
+  background:#fff; border-radius:50%; transition:.3s;
+}
+.toggle-switch input:checked + .toggle-slider { background:#27ae60; }
+.toggle-switch input:checked + .toggle-slider:before { transform:translateX(22px); }
+
+.priority-badge {
+  position:absolute; top:14px; right:14px;
+  background:#1a1040; color:#9b59b6; font-size:11px; font-weight:bold;
+  padding:3px 8px; border-radius:4px; border:1px solid #6c3483;
+}
+
+.key-link { font-size:11px; color:#3498db; text-decoration:none; margin-left:6px; }
+.key-link:hover { text-decoration:underline; }
+
+.status-dot {
+  display:inline-block; width:8px; height:8px; border-radius:50%;
+  margin-right:5px; vertical-align:middle;
+}
+.dot-ready   { background:#27ae60; }
+.dot-nokey   { background:#f39c12; }
+.dot-off     { background:#566573; }
+
+.card-footer {
+  margin-top:14px; padding-top:12px; border-top:1px solid #1a3a4a;
+  font-size:11px; color:#7f8c8d; display:flex; align-items:center; gap:6px;
+}
+
+/* 저장 버튼 */
+.save-section {
+  margin-top:28px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+}
+.btn-save {
+  background:linear-gradient(135deg,#6c3483,#8e44ad); color:#fff;
+  border:none; padding:12px 32px; border-radius:8px; font-size:14px;
+  font-weight:bold; cursor:pointer; transition:opacity .2s;
+}
+.btn-save:hover { opacity:0.88; }
+.btn-reload {
+  background:#1a3a4a; color:#7fb3f5; border:1px solid #2c5f7a;
+  padding:11px 20px; border-radius:8px; font-size:13px; cursor:pointer;
+}
+.btn-reload:hover { background:#1f4a5f; }
+.save-hint { font-size:12px; color:#566573; }
+
+/* 상태 표시줄 */
+.status-bar {
+  background:#16213e; border:1px solid #1a3a4a; border-radius:8px;
+  padding:14px 18px; margin-bottom:22px; display:flex; gap:20px; flex-wrap:wrap;
+}
+.status-item { font-size:12px; }
+.status-item .lbl { color:#7f8c8d; }
+.status-item .val { color:#e0e0e0; font-weight:bold; margin-left:4px; }
+
+/* 폴백 체인 섹션 */
+.chain-section {
+  background:#16213e; border:1px solid #1a3a4a; border-radius:10px;
+  padding:18px 20px; margin-bottom:24px;
+}
+.chain-title { font-size:14px; font-weight:bold; color:#9b59b6; margin-bottom:12px; }
+.chain-live { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.chain-provider {
+  display:flex; align-items:center; gap:6px;
+  background:#0d1923; border:1px solid #2c4a6a; border-radius:6px;
+  padding:6px 12px; font-size:12px;
+}
+.chain-provider.active-provider { border-color:#27ae60; background:#0a2d1a; }
+.chain-provider.inactive-provider { opacity:0.4; }
+.chain-sep { color:#566573; font-size:18px; }
+
+/* toast */
+#toast {
+  position:fixed; bottom:24px; right:24px; padding:12px 22px;
+  border-radius:8px; font-size:13px; font-weight:bold;
+  opacity:0; transition:opacity .3s; pointer-events:none; z-index:9999;
+}
+#toast.show { opacity:1; }
+#toast.ok  { background:#1e8449; color:#fff; }
+#toast.err { background:#a93226; color:#fff; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>⚙️ AI 공급자 설정</h1>
+  <span class="sub">자동학습에 사용할 AI 를 우선순위 순서대로 설정합니다</span>
+  <div class="nav">
+    <a href="/">← 분석 페이지</a>
+    <a href="/auto-learn">🤖 Auto Learn</a>
+    <a href="/keywords">🔑 Keywords</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 폴백 체인 현황 -->
+  <div class="chain-section">
+    <div class="chain-title">🔗 현재 폴백 체인 (우선순위 순서로 자동 전환)</div>
+    <div class="chain-live" id="chainLive">
+      {% set ready_providers = providers | selectattr('ready') | list %}
+      {% if ready_providers %}
+        {% for p in ready_providers %}
+        <div class="chain-provider active-provider">
+          <span class="status-dot dot-ready"></span>
+          <strong>{{ loop.index }}</strong>. {{ p.label }}
+        </div>
+        {% if not loop.last %}
+        <span class="chain-sep">→</span>
+        {% endif %}
+        {% endfor %}
+      {% else %}
+      <span style="color:#e74c3c; font-size:13px;">
+        ⚠️ 활성화된 공급자 없음 — API 키를 입력하고 활성화하세요
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 상태 표시줄 -->
+  <div class="status-bar">
+    <div class="status-item">
+      <span class="lbl">🟢 준비된 공급자:</span>
+      <span class="val">{{ providers | selectattr('ready') | list | length }} / {{ providers | length }}</span>
+    </div>
+    <div class="status-item">
+      <span class="lbl">폴백 자동전환:</span>
+      <span class="val" style="color:#27ae60;">활성화됨</span>
+    </div>
+    <div class="status-item">
+      <span class="lbl">설정 파일:</span>
+      <span class="val" style="font-family:monospace; font-size:11px;">keywords/ai_config.yaml</span>
+    </div>
+  </div>
+
+  <!-- 안내 배너 -->
+  <div class="info-banner">
+    <strong>💡 동작 원리:</strong>
+    PCAP 분석 후 미탐지 패킷을 아래 설정된 AI 에 우선순위 순서대로 질의합니다.
+    1순위 공급자가 실패(오류·할당량 초과)하면 자동으로 2순위로 전환됩니다.
+    <strong>DeepSeek</strong>과 <strong>Grok</strong>은 무료 크레딧이 있어 Claude 사용량 절약에 효과적입니다.<br>
+    <div class="chain-arrow">
+      <div class="chain-box">🥇 Claude (가장 정확)</div>
+      <span>→ 실패 시 →</span>
+      <div class="chain-box">🥈 OpenAI GPT</div>
+      <span>→</span>
+      <div class="chain-box">🥉 DeepSeek (무료)</div>
+      <span>→</span>
+      <div class="chain-box">Grok (무료)</div>
+      <span>→</span>
+      <div class="chain-box">GitHub Copilot</div>
+    </div>
+  </div>
+
+  <!-- 공급자 카드 -->
+  <div class="provider-grid" id="providerGrid">
+
+    {% for p in providers %}
+    <div class="provider-card {% if p.ready %}enabled{% endif %}" id="card-{{ p.id }}">
+
+      <div class="priority-badge">우선순위 {{ p.priority }}</div>
+
+      <div class="card-header">
+        <div class="provider-icon icon-{{ p.id }}">
+          {% if p.id == 'claude'   %}🟣
+          {% elif p.id == 'openai'  %}🤖
+          {% elif p.id == 'deepseek'%}🐋
+          {% elif p.id == 'grok'    %}⚡
+          {% elif p.id == 'copilot' %}🐙
+          {% else %}🔮{% endif %}
+        </div>
+        <div>
+          <div class="provider-name">
+            {{ p.label }}
+            {% if p.free_tier %}
+            <span class="badge-free">무료 크레딧</span>
+            {% else %}
+            <span class="badge-paid">유료</span>
+            {% endif %}
+          </div>
+          <div class="provider-note">{{ p.note }}</div>
+        </div>
+      </div>
+
+      <!-- 활성화 토글 -->
+      <div class="toggle-row">
+        <span class="toggle-label">활성화</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="en-{{ p.id }}"
+                 {% if p.enabled %}checked{% endif %}
+                 onchange="updateCard('{{ p.id }}')">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- API 키 입력 -->
+      <div class="form-row">
+        <label class="form-label">
+          API 키
+          <a href="{{ p.key_help }}" target="_blank" class="key-link">🔗 발급 페이지</a>
+        </label>
+        <input type="password" class="form-input key-input" id="key-{{ p.id }}"
+               placeholder="{% if p.has_key %}● 저장된 키 있음 (변경하려면 입력){% else %}API 키를 입력하세요{% endif %}"
+               autocomplete="off">
+        <div style="margin-top:4px; display:flex; gap:8px;">
+          <button onclick="toggleKeyVisible('{{ p.id }}')"
+                  style="font-size:11px; background:none; border:none; color:#7fb3f5; cursor:pointer; padding:0;">
+            👁 표시/숨김
+          </button>
+          {% if p.has_key %}
+          <span style="font-size:11px; color:#27ae60;">✅ 키 저장됨</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 모델 선택 -->
+      <div class="form-row">
+        <label class="form-label">모델 (비워두면 기본값 사용)</label>
+        <input type="text" class="form-input" id="model-{{ p.id }}"
+               placeholder="{{ p.model }}" value="">
+      </div>
+
+      <!-- 우선순위 -->
+      <div class="form-row">
+        <label class="form-label">우선순위 (1 = 최우선)</label>
+        <input type="number" class="form-input" id="prio-{{ p.id }}"
+               min="1" max="99" value="{{ p.priority }}"
+               oninput="updateCard('{{ p.id }}')">
+      </div>
+
+      <!-- 카드 하단 상태 -->
+      <div class="card-footer">
+        {% if p.ready %}
+        <span class="status-dot dot-ready"></span> 준비 완료 — 자동학습에 사용됩니다
+        {% elif p.enabled and not p.has_key %}
+        <span class="status-dot dot-nokey"></span> 활성화됨 — API 키 없음
+        {% else %}
+        <span class="status-dot dot-off"></span> 비활성화됨
+        {% endif %}
+      </div>
+
+    </div>
+    {% endfor %}
+
+  </div>
+
+  <!-- 저장 버튼 -->
+  <div class="save-section">
+    <button class="btn-save" onclick="saveAll()">💾 설정 저장 &amp; 즉시 적용</button>
+    <button class="btn-reload" onclick="reloadOnly()">🔄 파일 재로드 (키 변경 없이)</button>
+    <span class="save-hint">저장 후 서버 재시작 없이 즉시 자동학습에 적용됩니다</span>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// 공급자 ID 목록 (Jinja 에서 주입)
+const PROVIDER_IDS = {{ providers | map(attribute='id') | list | tojson }};
+
+function updateCard(pid) {
+  const card    = document.getElementById('card-' + pid);
+  const enabled = document.getElementById('en-' + pid).checked;
+  const hasKey  = document.getElementById('key-' + pid).value.trim() !== '';
+  // 카드 테두리 색상 즉시 업데이트
+  card.classList.toggle('enabled', enabled && hasKey);
+}
+
+function toggleKeyVisible(pid) {
+  const inp = document.getElementById('key-' + pid);
+  inp.type  = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function saveAll() {
+  // 모든 공급자 설정 수집
+  const providers = PROVIDER_IDS.map(pid => ({
+    id:       pid,
+    enabled:  document.getElementById('en-' + pid).checked,
+    api_key:  document.getElementById('key-' + pid).value.trim(),
+    model:    document.getElementById('model-' + pid).value.trim(),
+    priority: parseInt(document.getElementById('prio-' + pid).value) || 99,
+  }));
+
+  try {
+    const res  = await fetch('/ai-settings/save', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({providers}),
+    });
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      const active = data.providers || [];
+      showToast(
+        active.length > 0
+          ? `✅ 저장 완료 — 활성 공급자: ${active.join(' → ')}`
+          : '✅ 저장 완료 (활성 공급자 없음)',
+        'ok'
+      );
+      setTimeout(() => location.reload(), 900);
+    } else {
+      showToast('❌ 저장 실패', 'err');
+    }
+  } catch(e) {
+    showToast('❌ 오류: ' + e.message, 'err');
+  }
+}
+
+async function reloadOnly() {
+  try {
+    const res  = await fetch('/ai-settings/reload', { method:'POST' });
+    const data = await res.json();
+    const active = data.providers || [];
+    showToast(
+      active.length > 0
+        ? `🔄 재로드 완료 — 활성: ${active.join(' → ')}`
+        : '🔄 재로드 완료 (활성 공급자 없음)',
+      'ok'
+    );
+  } catch(e) {
+    showToast('❌ 재로드 실패: ' + e.message, 'err');
+  }
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'show ' + (type || 'ok');
+  setTimeout(() => { t.className = ''; }, 2800);
+}
+</script>
+</body>
+</html>
