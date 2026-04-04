@@ -53,6 +53,11 @@ domains:
     category: "Microsoft / Azure CDN"
     note: "Azure CDN"
 
+  # ── localdomain ─────────────────────────────────────────────────────────────────
+  - domain: "wpad.localdomain"
+    category: "localdomain"
+    note: "localdomain"
+
   # ── Google ─────────────────────────────────────────────────────────────────
   - domain: "google.com"
     category: "Google"
