@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auto Learn Manager — PCAP Analyzer</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'Segoe UI',Arial,sans-serif; background:#0f1923; color:#e0e0e0; min-height:100vh; }
+
+.top-bar {
+  background:linear-gradient(135deg,#0d2137 0%,#0a3d1f 100%);
+  padding:14px 28px; display:flex; align-items:center; gap:16px;
+  border-bottom:2px solid #27ae60;
+}
+.top-bar h1 { font-size:20px; color:#fff; }
+.top-bar a  { color:#7fb3f5; font-size:13px; text-decoration:none; margin-left:auto; }
+.top-bar a + a { margin-left:12px; }
+
+.container { max-width:1200px; margin:0 auto; padding:28px 20px; }
+
+/* 통계 카드 */
+.stat-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:28px; }
+.stat-card {
+  background:#16213e; border:1px solid #1a3a4a; border-radius:10px;
+  padding:18px 20px; text-align:center;
+}
+.stat-card .val { font-size:32px; font-weight:bold; color:#27ae60; }
+.stat-card .lbl { font-size:12px; color:#7f8c8d; margin-top:4px; }
+
+/* 탭 */
+.tabs { display:flex; gap:4px; margin-bottom:20px; border-bottom:2px solid #1a3a4a; }
+.tab-btn {
+  background:none; border:none; color:#7f8c8d; padding:9px 20px;
+  font-size:13px; cursor:pointer; border-bottom:3px solid transparent;
+  border-radius:6px 6px 0 0; transition:all .15s;
+}
+.tab-btn:hover  { color:#fff; background:#1c2f45; }
+.tab-btn.active { color:#27ae60; border-bottom-color:#27ae60; font-weight:bold; background:#16213e; }
+.tab-panel      { display:none; }
+.tab-panel.active { display:block; }
+
+/* 섹션 타이틀 */
+.sec-title {
+  font-size:15px; font-weight:bold; color:#27ae60;
+  margin-bottom:14px; padding-bottom:7px; border-bottom:1px solid #1a3a4a;
+}
+
+/* 카테고리 카드 */
+.cat-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; }
+.cat-card {
+  background:#16213e; border:1px solid #1a3a4a; border-radius:8px; padding:16px;
+}
+.cat-card .cat-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.cat-name  { font-weight:bold; font-size:14px; }
+.sev-tag   { font-size:10px; font-weight:bold; padding:2px 8px; border-radius:3px; }
+.sev-CRITICAL { background:#4a1010; color:#e74c3c; }
+.sev-HIGH     { background:#3d2010; color:#e67e22; }
+.sev-MEDIUM   { background:#3d3a10; color:#f1c40f; }
+.sev-LOW      { background:#10203a; color:#3498db; }
+.cat-meta  { font-size:11px; color:#7f8c8d; margin-bottom:10px; }
+.kw-list   { display:flex; flex-wrap:wrap; gap:5px; }
+.kw-chip {
+  background:#0d2137; border:1px solid #2c4a6a; color:#a8d8f0;
+  font-family:monospace; font-size:11px; padding:3px 8px; border-radius:4px;
+  display:flex; align-items:center; gap:4px;
+}
+.kw-chip .del-btn {
+  background:none; border:none; color:#e74c3c; cursor:pointer;
+  font-size:12px; font-weight:bold; padding:0 2px; line-height:1;
+}
+.kw-chip .del-btn:hover { color:#ff6b6b; }
+
+/* 로그 테이블 */
+.log-table { width:100%; border-collapse:collapse; font-size:12px; }
+.log-table thead th {
+  background:#0f3460; color:#a0c4ff; padding:9px 12px;
+  text-align:left; border-bottom:2px solid #27ae60;
+}
+.log-table tbody tr { border-bottom:1px solid #1a3a4a; transition:background .15s; }
+.log-table tbody tr:hover { background:#1c2f45; }
+.log-table tbody td { padding:7px 12px; vertical-align:top; }
+.log-sev { display:inline-block; font-size:10px; font-weight:bold; padding:1px 6px; border-radius:3px; }
+
+/* 빈 상태 */
+.empty-msg { text-align:center; color:#566573; padding:40px; font-size:14px; }
+
+/* 검색 */
+.search-bar { margin-bottom:14px; }
+.search-bar input {
+  width:100%; padding:8px 14px; background:#16213e; border:1px solid #1a3a4a;
+  border-radius:6px; color:#e0e0e0; font-size:13px; outline:none;
+}
+.search-bar input:focus { border-color:#27ae60; }
+
+/* toast */
+#toast {
+  position:fixed; bottom:24px; right:24px;
+  background:#1e8449; color:#fff; padding:10px 20px;
+  border-radius:8px; font-size:13px; font-weight:bold;
+  opacity:0; transition:opacity .3s; pointer-events:none; z-index:9999;
+}
+#toast.show { opacity:1; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>🤖 Auto Learn Manager</h1>
+  <span style="font-size:12px;color:#7f8c8d;">자동학습 키워드 현황 및 관리</span>
+  <a href="/">← 분석 페이지</a>
+  <a href="/keywords">🔑 Keywords</a>
+  <a href="/whitelist">🛡️ Whitelist</a>
+  <a href="/ai-settings">⚙️ AI 설정</a>
+</div>
+
+<div class="container">
+
+  <!-- 통계 카드 -->
+  <div class="stat-cards">
+    <div class="stat-card">
+      <div class="val">{{ stats.total_learned }}</div>
+      <div class="lbl">누적 학습 키워드</div>
+    </div>
+    <div class="stat-card">
+      <div class="val">{{ stats.total_auto_cats }}</div>
+      <div class="lbl">자동생성 카테고리</div>
+    </div>
+    <div class="stat-card">
+      <div class="val">{{ stats.total_auto_kws }}</div>
+      <div class="lbl">현재 활성 키워드</div>
+    </div>
+    <div class="stat-card" style="border-color:#1a4a2e;">
+      <div class="val" style="font-size:14px; color:#7f8c8d; margin-top:8px;">
+        {{ stats.last_learned_at }}
+      </div>
+      <div class="lbl">마지막 학습 시각</div>
+    </div>
+  </div>
+
+  <!-- 탭 -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('cats', this)">📦 학습된 카테고리</button>
+    <button class="tab-btn"        onclick="switchTab('log',  this)">📋 학습 이력</button>
+    <button class="tab-btn"        onclick="switchTab('info', this)">ℹ️ 동작 원리</button>
+  </div>
+
+  <!-- 탭 1: 학습된 카테고리 -->
+  <div class="tab-panel active" id="tab-cats">
+    {% if auto_cats %}
+    <div class="sec-title">자동학습으로 추가된 카테고리 ({{ auto_cats|length }}개)</div>
+    <div class="search-bar">
+      <input type="text" id="catSearch" placeholder="🔍 카테고리·키워드 검색..."
+             oninput="filterCats()">
+    </div>
+    <div class="cat-cards" id="catGrid">
+      {% for cat in auto_cats %}
+      <div class="cat-card" data-search="{{ cat.name|lower }} {% for k in cat.keywords %}{{ k|lower }} {% endfor %}">
+        <div class="cat-header">
+          <span class="cat-name">{{ cat.name }}</span>
+          <span class="sev-tag sev-{{ cat.severity }}">{{ cat.severity }}</span>
+          <span style="margin-left:auto; font-size:10px; color:#566573;">ID:{{ cat.category_id }}</span>
+        </div>
+        <div class="cat-meta">
+          {{ cat.keyword_count }}개 키워드 · 추가됨 {{ cat.added_at }}
+        </div>
+        <div class="kw-list">
+          {% for kw in cat.keywords %}
+          <span class="kw-chip">
+            <code>{{ kw }}</code>
+            <button class="del-btn"
+                    onclick="deleteKw('{{ cat.name|replace("'","\\'")|e }}', '{{ kw|replace("'","\\'")|e }}')"
+                    title="이 키워드 삭제">✕</button>
+          </span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-msg">
+      🤖 아직 자동학습된 키워드가 없습니다.<br>
+      <span style="font-size:12px; margin-top:8px; display:block; color:#7f8c8d;">
+        PCAP 파일을 업로드하면 미탐지 패킷이 AI 분석되어 자동으로 추가됩니다.
+      </span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 탭 2: 학습 이력 -->
+  <div class="tab-panel" id="tab-log">
+    {% if log %}
+    <div class="sec-title">최근 학습 이력 ({{ log|length }}건)</div>
+    <table class="log-table">
+      <thead>
+        <tr>
+          <th>추가 시각</th>
+          <th>카테고리</th>
+          <th>키워드</th>
+          <th>심각도</th>
+          <th>프로토콜</th>
+          <th>Frame</th>
+          <th>판단 근거</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in log %}
+        <tr>
+          <td style="color:#7f8c8d; white-space:nowrap;">{{ entry.added_at }}</td>
+          <td>{{ entry.category }}</td>
+          <td><code style="color:#a8d8f0; background:#0d2137; padding:1px 6px; border-radius:3px;">
+              {{ entry.keyword }}</code></td>
+          <td><span class="log-sev sev-{{ entry.severity }}">{{ entry.severity }}</span></td>
+          <td style="color:#95a5a6;">{{ entry.protocol }}</td>
+          <td style="color:#7f8c8d;">{{ entry.frame_no }}</td>
+          <td style="color:#95a5a6; font-size:11px;">{{ entry.reason }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-msg">학습 이력이 없습니다.</div>
+    {% endif %}
+  </div>
+
+  <!-- 탭 3: 동작 원리 -->
+  <div class="tab-panel" id="tab-info">
+    <div style="background:#16213e; border:1px solid #1a3a4a; border-radius:8px; padding:22px; line-height:1.9; font-size:13px;">
+      <h3 style="color:#27ae60; margin-bottom:14px;">🤖 자동학습 동작 원리</h3>
+
+      <p style="margin-bottom:16px;">
+        PCAP 파일 업로드 시 <strong>기존 키워드 미탐지 + 화이트리스트 미일치</strong> 패킷을
+        <strong>다중 AI 공급자 폴백 체인</strong>으로 분석하여 <code>keywords.yaml</code>에 자동 추가합니다.
+        <a href="/ai-settings" style="color:#9b59b6; font-weight:bold;">⚙️ AI 설정 페이지</a>에서 우선순위와 API 키를 관리합니다.
+      </p>
+
+      <!-- 공급자 기여 통계 -->
+      {% if stats.provider_counts %}
+      <div style="background:#0d2137; border-radius:6px; padding:14px; margin-bottom:16px;">
+        <div style="font-size:12px; color:#f39c12; font-weight:bold; margin-bottom:8px;">📊 공급자별 기여 통계</div>
+        {% for prov, cnt in stats.provider_counts.items() %}
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+          <span style="font-size:12px; color:#a8d8f0; min-width:180px;">{{ prov }}</span>
+          <div style="flex:1; background:#1a3a4a; border-radius:3px; height:8px; overflow:hidden;">
+            <div style="height:100%; background:#27ae60; width:{{ [cnt * 10, 100] | min }}%;"></div>
+          </div>
+          <span style="font-size:11px; color:#95a5a6;">{{ cnt }}개</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-bottom:20px;">
+        <div style="background:#0d2137; border-radius:6px; padding:14px;">
+          <div style="color:#f39c12; font-weight:bold; margin-bottom:6px;">① 대상 선별</div>
+          <div style="font-size:12px; color:#95a5a6;">
+            kw_detected=False<br>wl_matched=False<br>skipped_reason=None<br>
+            payload ≥ 8 bytes<br>중복 payload 제거<br>최대 <strong style="color:#e0e0e0;">15개</strong>/세션
+          </div>
+        </div>
+        <div style="background:#0d2137; border-radius:6px; padding:14px;">
+          <div style="color:#f39c12; font-weight:bold; margin-bottom:6px;">② AI 폴백 체인</div>
+          <div style="font-size:12px; color:#95a5a6;">
+            우선순위 순서대로 질의<br>
+            1순위 실패 → 2순위 자동전환<br>
+            Claude / OpenAI / DeepSeek<br>Grok / GitHub Copilot<br>
+            확신도 ≥ <strong style="color:#e0e0e0;">60%</strong>만 적용
+          </div>
+        </div>
+        <div style="background:#0d2137; border-radius:6px; padding:14px;">
+          <div style="color:#f39c12; font-weight:bold; margin-bottom:6px;">③ yaml 병합</div>
+          <div style="font-size:12px; color:#95a5a6;">
+            기존 카테고리 병합<br>없으면 신규 생성<br>중복 키워드 차단<br>
+            3~40 bytes 범위만<br>.bak 백업 자동 생성<br>공급자 기여 로그 기록
+          </div>
+        </div>
+        <div style="background:#0d2137; border-radius:6px; padding:14px;">
+          <div style="color:#f39c12; font-weight:bold; margin-bottom:6px;">④ 즉시 적용</div>
+          <div style="font-size:12px; color:#95a5a6;">
+            KeywordLoader 핫 리로드<br>다음 패킷부터 즉시 탐지<br>
+            Snort 룰 자동 생성<br>서버 재시작 불필요
+          </div>
+        </div>
+      </div>
+
+      <!-- 지원 AI 공급자 표 -->
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px; color:#9b59b6; font-weight:bold; margin-bottom:8px;">🔗 지원 AI 공급자</div>
+        <table style="width:100%; font-size:11px; border-collapse:collapse;">
+          <tr style="background:#0d1923; color:#7f8c8d;">
+            <th style="padding:6px 10px; text-align:left; border-bottom:1px solid #1a3a4a;">공급자</th>
+            <th style="padding:6px 10px; text-align:left; border-bottom:1px solid #1a3a4a;">API 호환</th>
+            <th style="padding:6px 10px; text-align:left; border-bottom:1px solid #1a3a4a;">무료</th>
+            <th style="padding:6px 10px; text-align:left; border-bottom:1px solid #1a3a4a;">특징</th>
+          </tr>
+          <tr style="border-bottom:1px solid #1a3a4a;">
+            <td style="padding:5px 10px; color:#e0e0e0;">🟣 Claude</td>
+            <td style="padding:5px 10px; color:#95a5a6;">Anthropic API</td>
+            <td style="padding:5px 10px; color:#e74c3c;">❌</td>
+            <td style="padding:5px 10px; color:#95a5a6;">보안 분석 정확도 최고</td>
+          </tr>
+          <tr style="border-bottom:1px solid #1a3a4a;">
+            <td style="padding:5px 10px; color:#e0e0e0;">🤖 ChatGPT</td>
+            <td style="padding:5px 10px; color:#95a5a6;">OpenAI API</td>
+            <td style="padding:5px 10px; color:#e74c3c;">❌</td>
+            <td style="padding:5px 10px; color:#95a5a6;">gpt-4o-mini 저비용 권장</td>
+          </tr>
+          <tr style="border-bottom:1px solid #1a3a4a;">
+            <td style="padding:5px 10px; color:#e0e0e0;">🐋 DeepSeek</td>
+            <td style="padding:5px 10px; color:#95a5a6;">OpenAI 호환</td>
+            <td style="padding:5px 10px; color:#27ae60;">✅ 크레딧</td>
+            <td style="padding:5px 10px; color:#95a5a6;">비용 매우 저렴, 추천 폴백</td>
+          </tr>
+          <tr style="border-bottom:1px solid #1a3a4a;">
+            <td style="padding:5px 10px; color:#e0e0e0;">⚡ Grok</td>
+            <td style="padding:5px 10px; color:#95a5a6;">OpenAI 호환</td>
+            <td style="padding:5px 10px; color:#27ae60;">✅ 크레딧</td>
+            <td style="padding:5px 10px; color:#95a5a6;">xAI 제공, 무료 크레딧</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 10px; color:#e0e0e0;">🐙 Copilot</td>
+            <td style="padding:5px 10px; color:#95a5a6;">OpenAI 호환</td>
+            <td style="padding:5px 10px; color:#f39c12;">구독 필요</td>
+            <td style="padding:5px 10px; color:#95a5a6;">GitHub Copilot 구독자</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="background:#0a2d1a; border:1px solid #1a5c38; border-radius:6px; padding:12px; font-size:12px; color:#7dcea0;">
+        <strong>💡 키워드 거부 방법:</strong>
+        잘못 학습된 키워드는 [학습된 카테고리] 탭에서 키워드 옆 <strong>✕</strong> 버튼을 눌러 삭제할 수 있습니다.
+        <br><strong>⚙️ AI 공급자 변경:</strong>
+        <a href="/ai-settings" style="color:#27ae60;">AI 설정 페이지</a>에서 우선순위·API 키를 변경하면 즉시 반영됩니다.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function filterCats() {
+  const q = document.getElementById('catSearch').value.toLowerCase();
+  document.querySelectorAll('#catGrid .cat-card').forEach(card => {
+    card.style.display = card.dataset.search.includes(q) ? '' : 'none';
+  });
+}
+
+async function deleteKw(category, keyword) {
+  if (!confirm(`키워드를 삭제하시겠습니까?\n\n[${category}] ${keyword}`)) return;
+  try {
+    const res  = await fetch('/auto-learn/delete', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({category, keyword})
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      showToast(`✅ 삭제됨: ${keyword}`);
+      setTimeout(() => location.reload(), 700);
+    } else {
+      showToast('❌ 삭제 실패');
+    }
+  } catch(e) {
+    showToast('❌ 오류: ' + e.message);
+  }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCAP Analyzer - Snort Rule Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .proto-badge {
+            display:inline-block; padding:2px 10px; border-radius:12px;
+            font-size:11px; font-weight:bold; color:#fff; margin-right:6px;
+        }
+        .proto-HTTP   { background:#3498db; }
+        .proto-DNS    { background:#9b59b6; }
+        .proto-FTP    { background:#e67e22; }
+        .proto-TELNET { background:#e74c3c; }
+        .proto-SMTP   { background:#2ecc71; }
+        .proto-OTHER  { background:#95a5a6; }
+
+        .proto-stats { display:flex; gap:10px; flex-wrap:wrap; margin:12px 0; }
+        .proto-stat-item {
+            display:flex; align-items:center; gap:6px;
+            background:#f8f9fa; border-radius:6px; padding:6px 14px; font-size:13px;
+        }
+        .proto-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+        /* Frame 레이블 */
+        .frame-label {
+            display:inline-block; background:#2c3e50; color:#f1c40f;
+            font-size:10px; font-weight:bold; padding:1px 8px; border-radius:3px;
+            margin-right:6px; font-family:monospace; letter-spacing:0.5px;
+            white-space:nowrap;
+        }
+
+        /* 룰 목록 */
+        .rules-container { border:1px solid #e0e0e0; border-radius:6px; overflow:hidden; }
+        .rule-item {
+            display:flex; align-items:flex-start; gap:6px;
+            padding:6px 10px; border-bottom:1px solid #f0f0f0; background:#fff;
+        }
+        .rule-item:last-child { border-bottom:none; }
+        .rule-item:hover { background:#f9f9f9; }
+        .rule-number { color:#bbb; font-size:11px; min-width:24px; padding-top:3px; }
+        .rule-body { font-family:monospace; font-size:12px; word-break:break-all; flex:1; }
+        .sev-CRITICAL { color:#c0392b; }
+        .sev-HIGH     { color:#d35400; }
+        .sev-MEDIUM   { color:#b7950b; }
+        .sev-LOW      { color:#2471a3; }
+
+        /* Hex+ASCII 나란히 보기 */
+        .hexdump-wrap {
+            font-family:'Courier New', monospace; font-size:12px;
+            background:#0d1117; color:#c9d1d9;
+            border-radius:6px; padding:12px 16px;
+            overflow-x:auto; line-height:1.8;
+        }
+        .hexdump-wrap table { border-collapse:collapse; width:100%; }
+        .hexdump-wrap td { padding:0 6px; white-space:pre; vertical-align:top; }
+        .hd-offset { color:#6e7681; width:80px; }
+        .hd-hex    { color:#79c0ff; width:380px; letter-spacing:0.5px; }
+        .hd-ascii  { color:#a5d6a7; border-left:1px solid #30363d; padding-left:12px !important; }
+        .hd-head   { color:#8b949e; font-size:10px; border-bottom:1px solid #30363d; }
+
+        /* 패킷별 룰 박스 */
+        .pkt-rules-box {
+            background:#1a1a2e; border-radius:5px;
+            padding:10px 14px; margin-top:6px;
+        }
+        .pkt-rule-entry {
+            padding:3px 0; border-bottom:1px solid #2a2a4a;
+            font-family:monospace; font-size:11px; word-break:break-all;
+        }
+        .pkt-rule-entry:last-child { border-bottom:none; }
+
+        /* 패킷 카드 헤더 */
+        .payload-header { cursor:pointer; }
+        .payload-title  { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+    </style>
+</head>
+<body>
+<h1>🔍 PCAP Analyzer — Protocol-Aware Rule Generator
+    <a href="/keywords" style="font-size:14px; font-weight:normal; margin-left:16px;
+       background:#2c3e50; color:#f1c40f; padding:4px 12px; border-radius:5px;
+       text-decoration:none;">🔑 Keywords</a>
+    <a href="/auto-learn" style="font-size:14px; font-weight:normal; margin-left:8px;
+       background:#1a6b3a; color:#2ecc71; padding:4px 12px; border-radius:5px;
+       text-decoration:none;">🤖 Auto Learn</a>
+    <a href="/noise-filter" style="font-size:14px; font-weight:normal; margin-left:8px;
+       background:#0d3737; color:#1abc9c; padding:4px 12px; border-radius:5px;
+       text-decoration:none;">🔇 Noise Filter</a>
+    <a href="/dns-reputation" style="font-size:14px; font-weight:normal; margin-left:8px;
+       background:#2d1040; color:#bb8fce; padding:4px 12px; border-radius:5px;
+       text-decoration:none;">🔍 DNS Rep</a>
+    <a href="/ai-settings" style="font-size:14px; font-weight:normal; margin-left:8px;
+       background:#4a1a6b; color:#bb8fce; padding:4px 12px; border-radius:5px;
+       text-decoration:none;">⚙️ AI 설정</a>
+</h1>
+
+{% if error %}
+<div class="error"><strong>❌ Error:</strong> {{ error }}</div>
+{% endif %}
+
+<form method="POST" enctype="multipart/form-data">
+    <label for="pcap_file">📁 Upload PCAP File:</label>
+    <input type="file" name="pcap_file" accept=".pcap,.pcapng" required>
+    <label style="margin-left:18px; font-size:13px; display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" name="auto_learn" value="on" checked
+               style="width:15px; height:15px; cursor:pointer;">
+        🤖 자동학습 (미탐지 패킷 → AI 분석 → keywords.yaml 자동 추가)
+    </label>
+    <button type="submit">🚀 Start Analysis</button>
+</form>
+
+<!-- 자동학습 결과 배너 -->
+{% if learn_result %}
+  {% if learn_result.no_provider %}
+  <div style="margin:12px 0; padding:10px 18px; background:#fdf6e3; border:1px solid #f39c12;
+              border-radius:8px; font-size:13px; color:#7d6608; display:flex; align-items:center; gap:10px;">
+    ⚠️ 자동학습 건너뜀 — AI API 키가 설정되지 않았습니다.
+    <a href="/ai-settings" style="color:#d68910; font-weight:bold; white-space:nowrap;">⚙️ AI 설정하기 →</a>
+  </div>
+  {% elif learn_result.added > 0 %}
+  <div style="margin:12px 0; padding:12px 18px; background:#eafaf1; border:1px solid #27ae60;
+              border-radius:8px; font-size:13px; color:#1e8449;">
+    <strong>🤖 자동학습 완료</strong> —
+    <strong>{{ learn_result.added }}개</strong> 신규 키워드 추가됨
+    {% if learn_result.new_cats > 0 %}
+    · <strong>{{ learn_result.new_cats }}개</strong> 신규 카테고리
+    {% endif %}
+    · 분석 대상 {{ learn_result.analyzed }}개 패킷
+    <a href="/auto-learn" style="margin-left:12px; color:#1a5c38; font-weight:bold;">
+      📋 상세 보기 →
+    </a>
+    <details style="margin-top:8px;">
+      <summary style="cursor:pointer; color:#2e7d52; font-size:12px;">세부 내역 보기</summary>
+      <div style="margin-top:6px; font-size:11px; font-family:monospace; color:#2e7d52;">
+        {% for line in learn_result.details %}{{ line }}<br>{% endfor %}
+      </div>
+    </details>
+  </div>
+  {% elif learn_result.analyzed > 0 %}
+  <div style="margin:12px 0; padding:10px 18px; background:#f0f4f8; border:1px solid #95a5a6;
+              border-radius:8px; font-size:13px; color:#5d6d7e;">
+    🤖 자동학습: {{ learn_result.analyzed }}개 패킷 분석 — 신규 키워드 없음
+    (중복 {{ learn_result.skipped }}개 건너뜀)
+  </div>
+  {% else %}
+  <div style="margin:12px 0; padding:10px 18px; background:#f0f4f8; border:1px solid #95a5a6;
+              border-radius:8px; font-size:13px; color:#5d6d7e;">
+    🤖 자동학습: 학습 대상 없음 (모든 패킷이 기탐지 또는 정상)
+  </div>
+  {% endif %}
+{% endif %}
+
+{# ── 결과 있을 때만 탭 대시보드 표시 ── #}
+{% if stats or traffic_summary or rules or payload_info %}
+
+<!-- ════════════════════════════════════════════════════════════════
+     메인 분석 결과 대시보드 — 탭 구조
+     탭 1: Overview  (KPI + 트래픽 요약)
+     탭 2: Rules     (Snort 룰, 심각도순)
+     탭 3: Payloads  (패킷 상세)
+     ════════════════════════════════════════════════════════════════ -->
+<div id="result-dashboard" style="margin-top:18px;">
+
+    <!-- ── 탭 버튼 바 ── -->
+    <div style="display:flex; gap:0; border-bottom:2px solid #1a3a4a; margin-bottom:0;">
+
+        <button id="tab-btn-overview" onclick="switchTab('overview')"
+            style="padding:11px 28px; background:#0d2137; border:none; border-bottom:3px solid #3498db;
+                   color:#7fb3f5; font-size:14px; font-weight:bold; cursor:pointer;
+                   border-radius:8px 8px 0 0; margin-right:2px; transition:all .15s;">
+            📊 Overview
+            {% if stats %}
+            <span style="background:#1a3a4a; color:#bdc3c7; font-size:11px;
+                          padding:1px 7px; border-radius:10px; margin-left:6px;">
+                {{ stats.total_packets }}프레임
+            </span>
+            {% endif %}
+        </button>
+
+        <button id="tab-btn-rules" onclick="switchTab('rules')"
+            style="padding:11px 28px; background:#16213e; border:none; border-bottom:3px solid transparent;
+                   color:#7f8c8d; font-size:14px; cursor:pointer;
+                   border-radius:8px 8px 0 0; margin-right:2px; transition:all .15s;">
+            📝 Rules
+            {% if rules %}
+            <span style="background:#1a3a4a; color:#bdc3c7; font-size:11px;
+                          padding:1px 7px; border-radius:10px; margin-left:6px;">
+                {{ rules|length }}
+            </span>
+            {% endif %}
+        </button>
+
+        <button id="tab-btn-payloads" onclick="switchTab('payloads')"
+            style="padding:11px 28px; background:#16213e; border:none; border-bottom:3px solid transparent;
+                   color:#7f8c8d; font-size:14px; cursor:pointer;
+                   border-radius:8px 8px 0 0; transition:all .15s;">
+            📦 Payloads
+            {% if payload_info %}
+            {% set threat_cnt = payload_info | selectattr('has_pattern') | list | length %}
+            <span style="background:{% if threat_cnt > 0 %}#2d0a0a; color:#e74c3c;{% else %}#1a3a4a; color:#bdc3c7;{% endif %};
+                          font-size:11px; padding:1px 7px; border-radius:10px; margin-left:6px;">
+                {% if threat_cnt > 0 %}⚠️ {{ threat_cnt }} threats{% else %}{{ payload_info|length }}{% endif %}
+            </span>
+            {% endif %}
+        </button>
+
+        <!-- 다운로드 버튼 (탭 바 오른쪽) -->
+        {% if rules %}
+        <div style="margin-left:auto; display:flex; align-items:center; gap:8px; padding:0 4px;">
+            <button onclick="copyAllRules()"
+                style="background:#1a3a2a; color:#27ae60; border:1px solid #1a5c38;
+                       padding:6px 14px; border-radius:6px; font-size:12px; cursor:pointer;">
+                📋 Copy Rules
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ════════════ 탭 1: Overview ════════════ -->
+    <div id="tab-overview" class="tab-panel" style="display:block; background:#0f1923;
+         border:1px solid #1a3a4a; border-top:none; border-radius:0 0 10px 10px; padding:22px 24px;">
+
+        <!-- KPI 카드 행 -->
+        {% if stats %}
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+                    gap:14px; margin-bottom:22px;">
+
+            <!-- FP Score -->
+            <div style="background:#0d1923; border:1px solid #1a3a4a; border-radius:10px;
+                         padding:14px 16px; text-align:center;">
+                <div style="font-size:26px; font-weight:bold;
+                    {% if false_positive_score < 30 %}color:#27ae60;
+                    {% elif false_positive_score < 60 %}color:#f39c12;
+                    {% else %}color:#e74c3c;{% endif %}">
+                    {{ false_positive_score }}
+                </div>
+                <div style="font-size:11px; color:#7f8c8d; margin-top:3px;">FP Score /100</div>
+                <div style="font-size:10px; margin-top:2px;
+                    {% if false_positive_score < 30 %}color:#27ae60;
+                    {% elif false_positive_score < 60 %}color:#f39c12;
+                    {% else %}color:#e74c3c;{% endif %}">
+                    {% if false_positive_score < 30 %}Reliable
+                    {% elif false_positive_score < 60 %}Review
+                    {% else %}Caution{% endif %}
+                </div>
+            </div>
+
+            <!-- Frames -->
+            <div style="background:#0d1923; border:1px solid #1a3a4a; border-radius:10px;
+                         padding:14px 16px; text-align:center;">
+                <div style="font-size:26px; font-weight:bold; color:#7fb3f5;">{{ stats.total_packets }}</div>
+                <div style="font-size:11px; color:#7f8c8d; margin-top:3px;">Frames</div>
+            </div>
+
+            <!-- Threats -->
+            <div style="background:#0d1923; border:1px solid #1a3a4a; border-radius:10px;
+                         padding:14px 16px; text-align:center;">
+                {% set tc = payload_info | selectattr('has_pattern') | list | length if payload_info else 0 %}
+                <div style="font-size:26px; font-weight:bold;
+                    color:{% if tc > 0 %}#e74c3c{% else %}#27ae60{% endif %};">{{ tc }}</div>
+                <div style="font-size:11px; color:#7f8c8d; margin-top:3px;">Threats</div>
+            </div>
+
+            <!-- Rules -->
+            <div style="background:#0d1923; border:1px solid #1a3a4a; border-radius:10px;
+                         padding:14px 16px; text-align:center;">
+                <div style="font-size:26px; font-weight:bold; color:#9b59b6;">{{ stats.rules_generated }}</div>
+                <div style="font-size:11px; color:#7f8c8d; margin-top:3px;">Rules</div>
+            </div>
+
+            <!-- Data -->
+            <div style="background:#0d1923; border:1px solid #1a3a4a; border-radius:10px;
+                         padding:14px 16px; text-align:center;">
+                {% set tb = stats.total_bytes %}
+                <div style="font-size:20px; font-weight:bold; color:#1abc9c;">
+                    {% if tb >= 1048576 %}{{ "%.1f"|format(tb/1048576) }}<span style="font-size:12px;"> MB</span>
+                    {% elif tb >= 1024 %}{{ "%.1f"|format(tb/1024) }}<span style="font-size:12px;"> KB</span>
+                    {% else %}{{ tb }}<span style="font-size:12px;"> B</span>{% endif %}
+                </div>
+                <div style="font-size:11px; color:#7f8c8d; margin-top:3px;">Payload</div>
+            </div>
+
+            <!-- Auto Learn -->
+            {% if learn_result and learn_result.added > 0 %}
+            <div style="background:#051a0a; border:1px solid #1a5c38; border-radius:10px;
+                         padding:14px 16px; text-align:center;">
+                <div style="font-size:26px; font-weight:bold; color:#2ecc71;">+{{ learn_result.added }}</div>
+                <div style="font-size:11px; color:#27ae60; margin-top:3px;">Keywords Learned</div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- 트래픽 요약 테이블 -->
+        {% if traffic_summary %}
+        <div style="border:1px solid #1a3a4a; border-radius:10px; overflow:hidden;">
+            <!-- 헤더 -->
+            <div style="background:#0d2137; padding:12px 18px; display:flex;
+                         align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <span style="font-size:14px; font-weight:bold; color:#fff;">📡 트래픽 요약</span>
+                {% if traffic_total %}
+                <span style="font-size:12px; color:#7f8c8d;">
+                    기준 IP:
+                    <code style="background:#0d1923; color:#f1c40f;
+                                  padding:1px 7px; border-radius:3px; font-size:11px;">
+                        {{ traffic_total.local_ip }}
+                    </code>
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- 테이블 -->
+            <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#0d1923; border-bottom:1px solid #1a3a4a;">
+                        <th style="padding:9px 16px; text-align:left; color:#7f8c8d; font-weight:500;">프로토콜</th>
+                        <th style="padding:9px 12px; text-align:right; color:#7f8c8d; font-weight:500;">총프레임</th>
+                        <th style="padding:9px 12px; text-align:right; color:#5dade2; font-weight:500;">📤 송신</th>
+                        <th style="padding:9px 12px; text-align:right; color:#58d68d; font-weight:500;">📥 수신</th>
+                        <th style="padding:9px 12px; text-align:right; color:#f39c12; font-weight:500;">📡 기타</th>
+                        <th style="padding:9px 12px; text-align:left; color:#7f8c8d; font-weight:500; min-width:150px;">프레임 비율</th>
+                        <th style="padding:9px 12px; text-align:right; color:#7f8c8d; font-weight:500;">데이터</th>
+                        <th style="padding:9px 12px; text-align:left; color:#7f8c8d; font-weight:500; min-width:120px;">데이터 비율</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% set _pc = {'HTTP':'#3498db','DNS':'#9b59b6','FTP':'#e67e22','TELNET':'#e74c3c','SMTP':'#2ecc71','ICMP':'#1abc9c','OTHER':'#95a5a6'} %}
+                {% for row in traffic_summary %}
+                {% set col = _pc.get(row.proto, '#95a5a6') %}
+                {% set is_zero = (row.total == 0) %}
+                <tr style="border-bottom:1px solid #0d1923; transition:background .1s;
+                            {% if is_zero %}opacity:0.35;{% endif %}"
+                    onmouseover="this.style.background='#1a2a3a'" onmouseout="this.style.background=''">
+                    <td style="padding:9px 16px;">
+                        <span style="display:inline-flex; align-items:center; gap:8px;">
+                            <span style="width:10px;height:10px;border-radius:50%;background:{{ col }};display:inline-block;flex-shrink:0;
+                                {% if is_zero %}opacity:0.4;{% endif %}"></span>
+                            <strong style="color:{% if is_zero %}#566573{% else %}#e0e0e0{% endif %};">{{ row.proto }}</strong>
+                        </span>
+                    </td>
+                    <td style="padding:9px 12px; text-align:right; color:{% if is_zero %}#566573{% else %}#e0e0e0{% endif %}; font-weight:bold;">
+                        {% if is_zero %}—{% else %}{{ row.total }}{% endif %}
+                    </td>
+                    <td style="padding:9px 12px; text-align:right; color:#5dade2; font-weight:bold;">{% if is_zero %}—{% else %}{{ row.tx }}{% endif %}</td>
+                    <td style="padding:9px 12px; text-align:right; color:#58d68d; font-weight:bold;">{% if is_zero %}—{% else %}{{ row.rx }}{% endif %}</td>
+                    <td style="padding:9px 12px; text-align:right; color:#f39c12; font-size:12px;">{% if is_zero %}—{% elif row.other > 0 %}{{ row.other }}{% else %}—{% endif %}</td>
+                    <td style="padding:9px 12px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div style="flex:1; background:#1a3a4a; border-radius:3px; height:7px; overflow:hidden; min-width:80px;">
+                                <div style="height:100%; width:{{ row.pct_frames }}%; background:{{ col }}; border-radius:3px;"></div>
+                            </div>
+                            <span style="color:#bdc3c7; font-size:12px; min-width:42px; text-align:right;">{% if is_zero %}0%{% else %}{{ row.pct_frames }}%{% endif %}</span>
+                        </div>
+                    </td>
+                    <td style="padding:9px 12px; text-align:right; color:#bdc3c7; font-size:12px;">
+                        {% if is_zero %}—{% else %}
+                        {% set b = row.bytes %}
+                        {% if b >= 1048576 %}{{ "%.1f"|format(b/1048576) }} MB
+                        {% elif b >= 1024 %}{{ "%.1f"|format(b/1024) }} KB
+                        {% else %}{{ b }} B{% endif %}
+                        {% endif %}
+                    </td>
+                    <td style="padding:9px 12px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div style="flex:1; background:#1a3a4a; border-radius:3px; height:7px; overflow:hidden; min-width:60px;">
+                                <div style="height:100%; width:{{ row.pct_bytes }}%; background:{{ col }}; opacity:0.7; border-radius:3px;"></div>
+                            </div>
+                            <span style="color:#bdc3c7; font-size:12px; min-width:42px; text-align:right;">{{ row.pct_bytes }}%</span>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                <!-- 합계 행 -->
+                {% if traffic_total %}
+                <tr style="background:#0d1923; border-top:2px solid #2c4a6a;">
+                    <td style="padding:9px 16px; color:#f1c40f; font-weight:bold;">합계</td>
+                    <td style="padding:9px 12px; text-align:right; color:#f1c40f; font-weight:bold;">{{ traffic_total.total }}</td>
+                    <td style="padding:9px 12px; text-align:right; color:#5dade2; font-weight:bold;">{{ traffic_total.tx }}</td>
+                    <td style="padding:9px 12px; text-align:right; color:#58d68d; font-weight:bold;">{{ traffic_total.rx }}</td>
+                    <td style="padding:9px 12px; text-align:right; color:#f39c12; font-weight:bold;">
+                        {% set other_total = traffic_total.total - traffic_total.tx - traffic_total.rx %}
+                        {% if other_total > 0 %}{{ other_total }}{% else %}—{% endif %}
+                    </td>
+                    <td colspan="3" style="padding:9px 12px; color:#7f8c8d; font-size:12px;">
+                        {% set tb = traffic_total.bytes %}
+                        전체 &nbsp;
+                        {% if tb >= 1048576 %}{{ "%.1f"|format(tb/1048576) }} MB
+                        {% elif tb >= 1024 %}{{ "%.1f"|format(tb/1024) }} KB
+                        {% else %}{{ tb }} B{% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+                </tbody>
+            </table>
+            </div>
+
+            <!-- 분포 바 + 범례 -->
+            <div style="padding:14px 18px; background:#0d1923; border-top:1px solid #1a3a4a;">
+                <div style="display:flex; height:18px; border-radius:5px; overflow:hidden; gap:1px; margin-bottom:10px;">
+                {% for row in traffic_summary %}
+                {% set col = _pc.get(row.proto, '#95a5a6') %}
+                {% if row.pct_frames > 0 %}
+                <div style="width:{{ row.pct_frames }}%; background:{{ col }};
+                             display:flex; align-items:center; justify-content:center; overflow:hidden;"
+                     title="{{ row.proto }}: {{ row.total }}프레임 ({{ row.pct_frames }}%)">
+                    {% if row.pct_frames > 8 %}
+                    <span style="font-size:10px; color:#fff; font-weight:bold; padding:0 3px;">{{ row.proto }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+                </div>
+                <div style="display:flex; gap:14px; flex-wrap:wrap;">
+                {% for row in traffic_summary %}
+                {% set col = _pc.get(row.proto, '#95a5a6') %}
+                {% if row.total > 0 %}
+                <div style="display:flex; align-items:center; gap:5px; font-size:12px; color:#bdc3c7;">
+                    <span style="width:10px; height:10px; border-radius:2px; background:{{ col }}; display:inline-block;"></span>
+                    {{ row.proto }} <span style="color:#566573;">{{ row.total }}프레임</span>
+                </div>
+                {% endif %}
+                {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 자동학습 결과 (Overview 하단 소형 배너) -->
+        {% if learn_result %}
+        <div style="margin-top:14px; padding:10px 16px; border-radius:8px; font-size:12px;
+            {% if learn_result.no_provider %}background:#1a1a0a; border:1px solid #f39c12; color:#f39c12;
+            {% elif learn_result.added > 0 %}background:#051a0a; border:1px solid #27ae60; color:#2ecc71;
+            {% else %}background:#0d1923; border:1px solid #1a3a4a; color:#566573;{% endif %}">
+            {% if learn_result.no_provider %}
+                ⚠️ 자동학습 건너뜀 — API 키 미설정
+                <a href="/ai-settings" style="color:#f39c12; font-weight:bold; margin-left:8px;">⚙️ AI 설정 →</a>
+            {% elif learn_result.added > 0 %}
+                🤖 자동학습 완료 — <strong>+{{ learn_result.added }}개</strong> 키워드
+                {% if learn_result.new_cats > 0 %}, +{{ learn_result.new_cats }}개 카테고리{% endif %}
+                <a href="/auto-learn" style="color:#27ae60; font-weight:bold; margin-left:8px;">📋 상세 →</a>
+            {% elif learn_result.analyzed > 0 %}
+                🤖 자동학습: {{ learn_result.analyzed }}개 패킷 분석 — 신규 키워드 없음
+            {% else %}
+                🤖 자동학습 대상 없음
+            {% endif %}
+        </div>
+        {% endif %}
+
+    </div><!-- /tab-overview -->
+
+    <!-- ════════════ 탭 2: Rules ════════════ -->
+    <div id="tab-rules" class="tab-panel" style="display:none; background:#0f1923;
+         border:1px solid #1a3a4a; border-top:none; border-radius:0 0 10px 10px; padding:20px 24px;">
+
+        {% if rules %}
+        <!-- 심각도별 필터 버튼 -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; align-items:center;">
+            <button onclick="filterRules('ALL')" id="rf-ALL"
+                style="padding:5px 14px; background:#1a3a4a; color:#bdc3c7; border:1px solid #2c5f7a;
+                       border-radius:5px; font-size:12px; cursor:pointer;">전체 {{ rules|length }}</button>
+            {% set cr_cnt = rules | select('contains','CRITICAL') | list | length %}
+            {% set hi_cnt = rules | select('contains','HIGH')     | list | length %}
+            {% set md_cnt = rules | select('contains','MEDIUM')   | list | length %}
+            {% if cr_cnt %}
+            <button onclick="filterRules('CRITICAL')" id="rf-CRITICAL"
+                style="padding:5px 14px; background:#2d0a0a; color:#e74c3c; border:1px solid #e74c3c;
+                       border-radius:5px; font-size:12px; cursor:pointer;">🔴 CRITICAL {{ cr_cnt }}</button>
+            {% endif %}
+            {% if hi_cnt %}
+            <button onclick="filterRules('HIGH')" id="rf-HIGH"
+                style="padding:5px 14px; background:#2d1a0a; color:#f39c12; border:1px solid #f39c12;
+                       border-radius:5px; font-size:12px; cursor:pointer;">🟠 HIGH {{ hi_cnt }}</button>
+            {% endif %}
+            {% if md_cnt %}
+            <button onclick="filterRules('MEDIUM')" id="rf-MEDIUM"
+                style="padding:5px 14px; background:#2d2a0a; color:#f1c40f; border:1px solid #f1c40f;
+                       border-radius:5px; font-size:12px; cursor:pointer;">🟡 MEDIUM {{ md_cnt }}</button>
+            {% endif %}
+        </div>
+
+        <div class="rules-container" id="rules-container">
+        {% for rule in rules %}
+        {% set parts     = rule.split('\n') %}
+        {% set frame_line= parts[0] if parts|length > 1 else '' %}
+        {% set rule_line = parts[1] if parts|length > 1 else parts[0] %}
+        {% set frame_num = frame_line.replace('# Frame ','').strip() if '# Frame' in frame_line else '' %}
+        {% set sev = 'CRITICAL' if 'CRITICAL' in rule_line else 'HIGH' if 'HIGH' in rule_line else 'MEDIUM' if 'MEDIUM' in rule_line else 'LOW' %}
+        <div class="rule-item" data-sev="{{ sev }}">
+            <span class="rule-number">{{ loop.index }}.</span>
+            {% if frame_num %}<span class="frame-label">Frame {{ frame_num }}</span>{% endif %}
+            <span style="display:inline-block; padding:1px 7px; border-radius:3px; font-size:10px;
+                          font-weight:bold; margin-right:6px; vertical-align:middle;
+                          {% if sev=='CRITICAL' %}background:#2d0a0a; color:#e74c3c; border:1px solid #e74c3c;
+                          {% elif sev=='HIGH' %}background:#2d1a0a; color:#f39c12; border:1px solid #f39c12;
+                          {% elif sev=='MEDIUM' %}background:#2d2a0a; color:#f1c40f; border:1px solid #f1c40f;
+                          {% else %}background:#1a3a4a; color:#7f8c8d; border:1px solid #2c5f7a;{% endif %}">
+                {{ sev }}
+            </span>
+            <code class="rule-body sev-{{ sev }}">{{ rule_line }}</code>
+        </div>
+        {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align:center; color:#566573; padding:40px; font-size:13px;">
+            탐지된 위협이 없거나 모든 패킷이 화이트리스트 처리됐습니다.
+        </div>
+        {% endif %}
+    </div><!-- /tab-rules -->
+
+    <!-- ════════════ 탭 3: Payloads ════════════ -->
+    <div id="tab-payloads" class="tab-panel" style="display:none; background:#0f1923;
+         border:1px solid #1a3a4a; border-top:none; border-radius:0 0 10px 10px; padding:20px 24px;">
+
+        {% if payload_info %}
+        <div class="payload-controls" style="margin-bottom:14px;">
+            <button onclick="expandAll()">Expand All</button>
+            <button onclick="collapseAll()">Collapse All</button>
+            <button onclick="showOnlyPatterns()" id="btn-threats" style="background:#2d0a0a; color:#e74c3c; border-color:#e74c3c;">
+                ⚠️ Threats Only
+            </button>
+            <button onclick="showAll()" id="btn-all">Show All</button>
+        </div>
+    {% for info in payload_info %}
+    {% if not info.error %}
+    <div class="payload-card {% if info.has_pattern %}highlight{% endif %}" data-has-pattern="{{ info.has_pattern|lower }}">
+
+        <!-- 카드 헤더 -->
+        <div class="payload-header" onclick="togglePayload({{ loop.index }})">
+            <div class="payload-title">
+                <span class="frame-label" style="font-size:12px;">Frame {{ info.frame_no }}</span>
+                <span class="proto-badge proto-{{ info.protocol }}">{{ info.protocol }}</span>
+                <span class="packet-size">{{ info.length }} bytes</span>
+                {% if info.has_pattern %}<span class="badge">🔴 Pattern Detected</span>{% endif %}
+                {# DNS 도메인 + 판정 배지 #}
+                {% if info.protocol == 'DNS' and info.app_info and info.app_info.query_name %}
+                  {% set _rep = info.dns_rep or {} %}
+                  {% set _vt  = _rep.get('verdict', 'UNKNOWN') if _rep else 'UNKNOWN' %}
+                  <span style="font-size:11px; font-family:monospace; margin-left:6px;
+                    padding:2px 8px; border-radius:3px;
+                    {% if _vt == 'MALICIOUS' %}background:#2d0a0a; color:#e74c3c; border:1px solid #e74c3c;
+                    {% elif _vt == 'SUSPICIOUS' %}background:#2d1a0a; color:#f39c12; border:1px solid #f39c12;
+                    {% elif _vt == 'SAFE' %}background:#0a2d0a; color:#27ae60; border:1px solid #27ae60;
+                    {% else %}background:#1a1a2d; color:#7f8c8d; border:1px solid #2c4a6a;{% endif %}">
+                    {{ info.app_info.query_name }}
+                  </span>
+                  {% if _vt != 'UNKNOWN' %}
+                  <span style="font-size:10px; font-weight:bold; padding:2px 7px; border-radius:3px; margin-left:2px;
+                    {% if _vt == 'MALICIOUS' %}background:#e74c3c; color:#fff;
+                    {% elif _vt == 'SUSPICIOUS' %}background:#f39c12; color:#fff;
+                    {% elif _vt == 'SAFE' %}background:#27ae60; color:#fff;
+                    {% endif %}">{{ _vt }}</span>
+                  {% endif %}
+                {% endif %}
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+
+        <!-- 카드 본문 -->
+        <div id="payload-{{ loop.index }}" class="payload-content">
+
+            {% if info.patterns %}
+            <div class="patterns">
+                <strong>🔍 Detected Patterns:</strong>
+                {% for p in info.patterns %}
+                <div class="pattern {{ 'critical' if '🚨' in p else 'warning' }}">{{ p }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- ══ DNS Reputation 판정 블록 ══ -->
+            {% if info.protocol == 'DNS' and info.dns_rep %}
+            {% set rep = info.dns_rep %}
+            {% set verdict = rep.verdict if rep.verdict else 'UNKNOWN' %}
+            <div style="margin:10px 0; padding:12px 16px; border-radius:6px; font-size:13px;
+                {% if verdict == 'MALICIOUS' %}
+                    background:#1a0505; border:1px solid #e74c3c; border-left:4px solid #e74c3c;
+                {% elif verdict == 'SUSPICIOUS' %}
+                    background:#1a0e05; border:1px solid #f39c12; border-left:4px solid #f39c12;
+                {% elif verdict == 'SAFE' %}
+                    background:#051a0a; border:1px solid #27ae60; border-left:4px solid #27ae60;
+                {% else %}
+                    background:#0d1a2d; border:1px solid #2c4a6a; border-left:4px solid #5d7a9a;
+                {% endif %}">
+
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                    <span style="font-size:16px;">
+                        {% if verdict == 'MALICIOUS' %}🚨
+                        {% elif verdict == 'SUSPICIOUS' %}⚠️
+                        {% elif verdict == 'SAFE' %}✅
+                        {% else %}🔍{% endif %}
+                    </span>
+                    <strong style="font-size:14px;
+                        {% if verdict == 'MALICIOUS' %}color:#e74c3c;
+                        {% elif verdict == 'SUSPICIOUS' %}color:#f39c12;
+                        {% elif verdict == 'SAFE' %}color:#27ae60;
+                        {% else %}color:#7fb3f5;{% endif %}">
+                        DNS Reputation: {{ verdict }}
+                    </strong>
+                    {% if info.app_info and info.app_info.query_name %}
+                    <code style="font-size:12px; background:#0d1923; padding:2px 8px;
+                                 border-radius:4px; color:#a8d8f0; font-family:monospace;">
+                        {{ info.app_info.query_name }}
+                    </code>
+                    {% endif %}
+                    {% if rep.source %}
+                    <span style="font-size:11px; color:#7f8c8d; background:#0d1923;
+                                 padding:2px 7px; border-radius:3px;">
+                        source: {{ rep.source }}
+                    </span>
+                    {% endif %}
+                </div>
+
+                {% if verdict in ('MALICIOUS', 'SUSPICIOUS') and rep.total %}
+                <div style="display:flex; gap:16px; margin-bottom:8px; font-size:12px; flex-wrap:wrap;">
+                    <span style="color:#e74c3c;">🔴 악성: <strong>{{ rep.malicious }}</strong></span>
+                    <span style="color:#f39c12;">🟡 의심: <strong>{{ rep.suspicious }}</strong></span>
+                    <span style="color:#7f8c8d;">전체 엔진: <strong>{{ rep.total }}</strong></span>
+                    <span style="color:#bb8fce;">점수: <strong>{{ rep.score }}/100</strong></span>
+                </div>
+                <!-- 점수 바 -->
+                <div style="background:#1a2a3a; border-radius:4px; height:6px;
+                            width:100%; margin-bottom:8px; overflow:hidden;">
+                    <div style="height:100%; width:{{ rep.score }}%; border-radius:4px;
+                        background:{% if rep.score >= 70 %}#e74c3c{% elif rep.score >= 30 %}#f39c12{% else %}#27ae60{% endif %};
+                        transition:width .3s;"></div>
+                </div>
+                {% endif %}
+
+                {% if rep.reason %}
+                <div style="font-size:12px; color:#95a5a6; line-height:1.6;">
+                    {{ rep.reason }}
+                </div>
+                {% endif %}
+
+                {% if rep.categories %}
+                <div style="margin-top:7px; display:flex; flex-wrap:wrap; gap:4px;">
+                    {% for cat in rep.categories %}
+                    <span style="background:#2d0a0a; color:#e74c3c; font-size:10px;
+                                 padding:2px 7px; border-radius:3px; border:1px solid #5a1a1a;">
+                        {{ cat }}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if verdict == 'SAFE' %}
+                <div style="font-size:12px; color:#2ecc71;">
+                    {% if rep.wl_category %}카테고리: {{ rep.wl_category }}{% endif %}
+                </div>
+                {% endif %}
+
+            </div>
+            {% endif %}
+
+            <!-- ══ 예외처리: 포트 443 등 룰 생성 제외 ══ -->
+            {% if info.skipped_reason %}
+                <div style="margin:10px 0; padding:8px 14px; background:#fdf2f2; border-left:4px solid #e74c3c; border-radius:0 6px 6px 0; font-size:12px; color:#922b21;">
+                    🚫 룰 생성 제외 — {{ info.skipped_reason }}
+                </div>
+
+            <!-- ══ 전역 화이트리스트 일치 (정상 패킷) — 모든 프로토콜 공통 ══ -->
+            {% elif info.wl_matched %}
+                <div style="margin:10px 0; padding:8px 14px; background:#eafaf1; border-left:4px solid #27ae60; border-radius:0 6px 6px 0; font-size:12px; color:#1e8449;">
+                    ✅ 화이트리스트 일치 — 정상 패킷으로 판정, 룰 생성 제외
+                    <span style="display:inline-block; margin-left:6px; background:#d5f5e3; color:#1a5c38; font-size:10px; padding:1px 7px; border-radius:3px;">{{ info.protocol }}</span><br>
+                    <span style="color:#566573; font-size:11px;">{{ info.wl_reason }}</span>
+                </div>
+
+            <!-- ══ 1단계: 키워드 탐지 우선 ══ -->
+            {% elif info.kw_detected %}
+
+                <!-- 키워드 매칭 있음 -->
+                <div style="margin:10px 0; padding:10px 14px; background:#fff8e1; border-left:4px solid #f39c12; border-radius:0 6px 6px 0;">
+                    <strong>🔑 Keyword Matches ({{ info.kw_keywords|length }})
+                        <span style="font-size:11px; font-weight:normal; color:#888;"> — severity:
+                            <span class="{% if info.kw_severity=='CRITICAL' %}sev-CRITICAL{% elif info.kw_severity=='HIGH' %}sev-HIGH{% elif info.kw_severity=='MEDIUM' %}sev-MEDIUM{% else %}sev-LOW{% endif %}" style="font-weight:bold;">{{ info.kw_severity }}</span>
+                        </span>
+                    </strong>
+                    <div style="margin-top:7px; display:flex; flex-wrap:wrap; gap:5px;">
+                        {% for cat in info.kw_categories %}
+                        <span style="background:#2c3e50; color:#f1c40f; font-size:11px; padding:2px 9px; border-radius:3px;">{{ cat }}</span>
+                        {% endfor %}
+                    </div>
+                    <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;">
+                        {% for kw in info.kw_keywords %}
+                        <code style="background:#fff3cd; color:#7d6608; font-size:10px; padding:1px 6px; border-radius:3px; border:1px solid #f0e68c;">{{ kw }}</code>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- 키워드 기반 룰 -->
+                {% if info.kw_rules %}
+                <div style="margin:6px 0;">
+                    <strong style="font-size:12px;">📋 Keyword Rules — Frame {{ info.frame_no }} ({{ info.kw_rules|length }}):</strong>
+                    <div class="pkt-rules-box">
+                        {% for rule in info.kw_rules %}
+                        {% set rp = rule.split('\n') %}
+                        {% set rl = rp[1] if rp|length > 1 else rp[0] %}
+                        <div class="pkt-rule-entry {% if 'CRITICAL' in rl %}sev-CRITICAL{% elif 'HIGH' in rl %}sev-HIGH{% elif 'MEDIUM' in rl %}sev-MEDIUM{% else %}sev-LOW{% endif %}">{{ rl }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+            {% else %}
+
+                <!-- ══ 키워드 탐지 없음 안내 ══ -->
+                <div style="margin:10px 0; padding:7px 14px; background:#f0f4f8; border-left:4px solid #95a5a6; border-radius:0 6px 6px 0; font-size:12px; color:#7f8c8d;">
+                    🔍 키워드 탐지 없음 — 프로토콜 기반 Snort 룰 자동 생성으로 진행
+                </div>
+
+                <!-- ══ 2단계: 프로토콜 기반 룰 ══ -->
+                {% if info.generated_rules %}
+                <div style="margin:6px 0;">
+                    <strong style="font-size:12px;">📋 Protocol Rules — Frame {{ info.frame_no }} ({{ info.generated_rules|length }}):</strong>
+                    <div class="pkt-rules-box">
+                        {% for rule in info.generated_rules %}
+                        {% set rp = rule.split('\n') %}
+                        {% set rl = rp[1] if rp|length > 1 else rp[0] %}
+                        <div class="pkt-rule-entry {% if 'CRITICAL' in rl %}sev-CRITICAL{% elif 'HIGH' in rl %}sev-HIGH{% elif 'MEDIUM' in rl %}sev-MEDIUM{% else %}sev-LOW{% endif %}">{{ rl }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+            {% endif %}
+
+            <!-- ★ Hex + ASCII 나란히 보기 ★ -->
+            <div style="margin:10px 0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <strong>🔢 Payload Hex &amp; ASCII — Frame {{ info.frame_no }} ({{ info.length }} bytes)</strong>
+                    <button onclick="copyHexDump({{ loop.index }})" style="font-size:11px; padding:3px 10px;">Copy Hex Dump</button>
+                </div>
+                <div class="hexdump-wrap" id="hexdump-{{ loop.index }}">
+                    <table>
+                        <thead>
+                            <tr class="hd-head">
+                                <td class="hd-offset">OFFSET  </td>
+                                <td class="hd-hex">── HEX ──────────────────────────────────────────</td>
+                                <td class="hd-ascii"> ASCII</td>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in info.hex_rows %}
+                            <tr>
+                                <td class="hd-offset">{{ row.offset }}</td>
+                                <td class="hd-hex">{{ row.hex }}</td>
+                                <td class="hd-ascii">{{ row.ascii }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="payload-stats">
+                <span class="stat-badge">Printable: {{ info.printable_percent }}%</span>
+                <span class="stat-badge">Null bytes: {{ info.null_count }}</span>
+                <span class="stat-badge">{{ info.ascii_range }}</span>
+                {% if info.protocol == 'HTTP' and info.app_info %}
+                  {% if info.app_info.method %}
+                  <span class="stat-badge" style="background:#1a3a5c; color:#7fb3f5;">
+                    {{ info.app_info.method }} {{ info.app_info.uri[:40] }}
+                  </span>
+                  {% endif %}
+                  {% if info.app_info.user_agent %}
+                  <span class="stat-badge" style="background:#1a1a3a; color:#bb8fce;" title="{{ info.app_info.user_agent }}">
+                    UA: {{ info.app_info.user_agent[:50] }}{% if info.app_info.user_agent|length > 50 %}…{% endif %}
+                  </span>
+                  {% endif %}
+                {% endif %}
+            </div>
+
+            <!-- ★ User-Agent 의심 탐지 결과 ★ -->
+            {% if info.protocol == 'HTTP' and info.app_info and info.app_info.ua_suspicious %}
+            {% set ua = info.app_info.ua_suspicious %}
+            <div style="margin:8px 0; padding:9px 14px; border-radius:6px; font-size:12px;
+                        {% if ua.severity == 'CRITICAL' %}background:#2d0a0a; border-left:4px solid #e74c3c; color:#f1948a;
+                        {% elif ua.severity == 'HIGH' %}background:#2d1a0a; border-left:4px solid #e67e22; color:#f0a868;
+                        {% elif ua.severity == 'MEDIUM' %}background:#2d2a0a; border-left:4px solid #f1c40f; color:#f7dc6f;
+                        {% else %}background:#1a2a1a; border-left:4px solid #7f8c8d; color:#aab7b8;{% endif %}">
+              <strong>🕵️ Suspicious User-Agent — {{ ua.severity }} / {{ ua.category }}</strong><br>
+              <span style="font-family:monospace; opacity:0.9;">{{ ua.ua }}</span><br>
+              <span style="opacity:0.7;">매칭 패턴: <code style="font-size:11px;">{{ ua.matched }}</code></span>
+            </div>
+            {% endif %}
+
+            <div class="payload-footer">
+                <button onclick="copyToClipboard('{{ info.full_hex }}', 'Hex')">Copy Full Hex</button>
+                <button onclick="copyToClipboard(`{{ info.full_ascii }}`, 'ASCII')">Copy ASCII</button>
+
+                <!-- ★ 화이트리스트 등록 버튼 ★ -->
+                {% if not info.wl_matched and not info.skipped_reason %}
+                <button class="wl-btn" id="wl-btn-{{ loop.index }}"
+                        onclick="openWlDialog({{ loop.index }},
+                                 '{{ info.protocol }}',
+                                 {{ info.frame_no }},
+                                 '{{ info.app_info.method if info.app_info else '' }}',
+                                 '{{ (info.app_info.uri[:60] if info.app_info else '') | replace("'", "\\'") }}',
+                                 '{{ info.full_hex[:80] }}')"
+                        style="background:#1a3a4a; color:#7fb3f5; border:1px solid #2c5f7a; padding:4px 12px; border-radius:5px; cursor:pointer; font-size:12px;">
+                  🛡️ 화이트리스트 추가
+                </button>
+                {% else %}
+                <span style="font-size:11px; color:#27ae60; padding:4px 8px;">✅ 화이트리스트 등록됨</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+
+        {% else %}
+        <div style="text-align:center; color:#566573; padding:40px; font-size:13px;">
+            페이로드 정보가 없습니다.
+        </div>
+        {% endif %}
+
+    </div><!-- /tab-payloads -->
+
+</div><!-- /result-dashboard -->
+{% endif %}
+
+{% if not stats and not traffic_summary and not rules and not payload_info and not error %}
+<div class="info-message">
+    <p>📤 Upload a PCAP file to analyze and generate protocol-specific Snort rules.</p>
+    <p>Protocols: <strong>HTTP · DNS · FTP · Telnet · SMTP · ICMP</strong> | Formats: .pcap, .pcapng</p>
+</div>
+{% endif %}
+
+<!-- ★ 화이트리스트 다이얼로그 ★ -->
+<div id="wl-dialog" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);
+     z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#16213e; border:1px solid #2c5f7a; border-radius:12px;
+              padding:28px 32px; width:480px; max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+    <h3 style="color:#7fb3f5; margin-bottom:18px; font-size:16px;">🛡️ 화이트리스트에 추가</h3>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px; color:#95a5a6; display:block; margin-bottom:5px;">설명 (메모)</label>
+      <input id="wl-desc" type="text" style="width:100%; padding:8px 10px; background:#0d1923;
+             border:1px solid #2c4a6a; border-radius:6px; color:#e0e0e0; font-size:13px; outline:none;"
+             placeholder="예: 내부 헬스체크 트래픽">
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px; color:#95a5a6; display:block; margin-bottom:5px;">매칭 방식</label>
+      <select id="wl-type" onchange="updateWlPreview()"
+              style="width:100%; padding:8px 10px; background:#0d1923; border:1px solid #2c4a6a;
+                     border-radius:6px; color:#e0e0e0; font-size:13px; outline:none;">
+        <option value="payload_text">payload_text — 텍스트 포함 여부 (부분 매칭, 권장)</option>
+        <option value="payload_hex">payload_hex — HEX 앞부분 매칭</option>
+        <option value="payload_exact">payload_exact — 전체 HEX 완전 일치</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px; color:#95a5a6; display:block; margin-bottom:5px;">매칭 값</label>
+      <input id="wl-value" type="text" style="width:100%; padding:8px 10px; background:#0d1923;
+             border:1px solid #2c4a6a; border-radius:6px; color:#e0e0e0; font-size:13px;
+             font-family:monospace; outline:none;"
+             placeholder="매칭할 텍스트 또는 HEX 값">
+      <div style="font-size:11px; color:#566573; margin-top:4px;" id="wl-value-hint"></div>
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <label style="font-size:12px; color:#95a5a6; display:block; margin-bottom:5px;">적용 프로토콜</label>
+      <select id="wl-proto" style="width:100%; padding:8px 10px; background:#0d1923;
+              border:1px solid #2c4a6a; border-radius:6px; color:#e0e0e0; font-size:13px; outline:none;">
+        <option value="ANY">ANY (모든 프로토콜)</option>
+        <option value="HTTP">HTTP</option>
+        <option value="DNS">DNS</option>
+        <option value="FTP">FTP</option>
+        <option value="SMTP">SMTP</option>
+        <option value="ICMP">ICMP</option>
+      </select>
+    </div>
+
+    <div style="display:flex; gap:10px; justify-content:flex-end;">
+      <button onclick="closeWlDialog()"
+              style="padding:9px 20px; background:#1a3a4a; color:#7fb3f5; border:1px solid #2c5f7a;
+                     border-radius:6px; cursor:pointer; font-size:13px;">취소</button>
+      <button onclick="submitWlEntry()"
+              style="padding:9px 24px; background:linear-gradient(135deg,#1a5c38,#27ae60);
+                     color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:bold;">
+        🛡️ 등록
+      </button>
+    </div>
+  </div>
+</div>
+<div id="wl-toast" style="display:none; position:fixed; bottom:24px; right:24px; padding:12px 22px;
+     border-radius:8px; font-size:13px; font-weight:bold; z-index:10000;"></div>
+
+{% if not rules and not payload_info and not error %}
+<div class="info-message">
+    <p>📤 Upload a PCAP file to analyze and generate protocol-specific Snort rules.</p>
+    <p>Protocols: <strong>HTTP · DNS · FTP · Telnet · SMTP</strong> | Formats: .pcap, .pcapng</p>
+</div>
+{% endif %}
+
+<script>
+function togglePayload(id) {
+    const c = document.getElementById('payload-' + id);
+    const i = event.currentTarget.querySelector('.toggle-icon');
+    const v = c.style.display !== 'none' && c.style.display !== '';
+    c.style.display = v ? 'none' : 'block';
+    i.textContent   = v ? '▶' : '▼';
+}
+function expandAll()  {
+    document.querySelectorAll('.payload-content').forEach(e => e.style.display='block');
+    document.querySelectorAll('.toggle-icon').forEach(e => e.textContent='▼');
+}
+function collapseAll() {
+    document.querySelectorAll('.payload-content').forEach(e => e.style.display='none');
+    document.querySelectorAll('.toggle-icon').forEach(e => e.textContent='▶');
+}
+function showOnlyPatterns() {
+    document.querySelectorAll('.payload-card').forEach(c => {
+        c.style.display = c.dataset.hasPattern === 'true' ? 'block' : 'none';
+    });
+}
+function showAll() { document.querySelectorAll('.payload-card').forEach(c => c.style.display='block'); }
+
+function copyToClipboard(text, type) {
+    navigator.clipboard.writeText(text).then(() => alert(type+' copied!')).catch(() => alert('Copy failed'));
+}
+function copyHexDump(id) {
+    const tbody = document.querySelector('#hexdump-' + id + ' tbody');
+    if (!tbody) return;
+    const lines = Array.from(tbody.querySelectorAll('tr')).map(tr => {
+        const td = tr.querySelectorAll('td');
+        return td[0].textContent.padEnd(10) + td[1].textContent.padEnd(52) + '  ' + td[2].textContent;
+    });
+    copyToClipboard(lines.join('\n'), 'Hex Dump');
+}
+function copyAllRules() {
+    const lines = Array.from(document.querySelectorAll('.rule-item')).map(item => {
+        const f = item.querySelector('.frame-label');
+        const b = item.querySelector('.rule-body');
+        return (f ? '# '+f.textContent.trim()+'\n' : '') + (b ? b.textContent.trim() : '');
+    });
+    copyToClipboard(lines.join('\n'), 'All rules');
+}
+window.onload = expandAll;
+
+// ── 화이트리스트 다이얼로그 ──────────────────────────────────────────────────
+let _wlCtx = {};
+
+function openWlDialog(idx, proto, frameNo, method, uri, hexPfx) {
+    _wlCtx = { idx, proto, frameNo, method, uri, hexPfx };
+    const dialog = document.getElementById('wl-dialog');
+
+    // 기본값 채우기
+    document.getElementById('wl-desc').value =
+        `Frame ${frameNo} — ${proto}` + (method ? ` ${method} ${uri}` : '') + ' (수동 등록)';
+
+    // 매칭 값: HTTP는 "METHOD URI", 그 외 HEX 앞부분
+    const defVal = method ? `${method} ${uri}` : hexPfx;
+    document.getElementById('wl-value').value = defVal;
+
+    // 프로토콜 선택
+    const sel = document.getElementById('wl-proto');
+    const opt = Array.from(sel.options).find(o => o.value === proto);
+    if (opt) sel.value = proto; else sel.value = 'ANY';
+
+    updateWlPreview();
+    dialog.style.display = 'flex';
+}
+
+function closeWlDialog() {
+    document.getElementById('wl-dialog').style.display = 'none';
+}
+
+function updateWlPreview() {
+    const t    = document.getElementById('wl-type').value;
+    const hint = document.getElementById('wl-value-hint');
+    if (t === 'payload_text')  hint.textContent = '페이로드 안에 이 문자열이 포함되면 화이트리스트 처리됩니다.';
+    else if (t === 'payload_hex')  hint.textContent = '페이로드 앞부분 HEX 가 이 값으로 시작하면 화이트리스트 처리됩니다.';
+    else if (t === 'payload_exact') hint.textContent = '페이로드 전체 HEX 가 정확히 일치할 때만 화이트리스트 처리됩니다.';
+}
+
+async function submitWlEntry() {
+    const desc  = document.getElementById('wl-desc').value.trim();
+    const type  = document.getElementById('wl-type').value;
+    const value = document.getElementById('wl-value').value.trim();
+    const proto = document.getElementById('wl-proto').value;
+
+    if (!desc || !value) { showWlToast('설명과 매칭 값을 입력하세요.', '#e74c3c'); return; }
+
+    try {
+        const res  = await fetch('/whitelist/add', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body:    JSON.stringify({
+                description: desc,
+                source:      'user_manual',
+                protocols:   [proto],
+                match_type:  type,
+                value:       value,
+            }),
+        });
+        const data = await res.json();
+        closeWlDialog();
+
+        if (data.status === 'ok') {
+            showWlToast(`✅ 화이트리스트 등록 완료 (총 ${data.total}개)`, '#27ae60');
+            // 버튼을 "등록됨" 상태로 전환
+            const btn = document.getElementById('wl-btn-' + _wlCtx.idx);
+            if (btn) {
+                btn.outerHTML = '<span style="font-size:11px; color:#27ae60; padding:4px 8px;">✅ 화이트리스트 등록됨</span>';
+            }
+        } else if (data.status === 'duplicate') {
+            showWlToast('⚠️ 이미 등록된 항목입니다.', '#f39c12');
+        } else {
+            showWlToast('❌ 등록 실패: ' + (data.message || '오류'), '#e74c3c');
+        }
+    } catch(e) {
+        showWlToast('❌ 오류: ' + e.message, '#e74c3c');
+    }
+}
+
+function showWlToast(msg, color) {
+    const t = document.getElementById('wl-toast');
+    t.textContent = msg;
+    t.style.background = color;
+    t.style.color = '#fff';
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+// 다이얼로그 바깥 클릭 시 닫기
+document.getElementById('wl-dialog').addEventListener('click', function(e) {
+    if (e.target === this) closeWlDialog();
+});
+
+
+// ── 탭 전환 ──────────────────────────────────────────────────────────────────
+function switchTab(name) {
+    const tabs    = ['overview','rules','payloads'];
+    const btns    = {
+        overview: document.getElementById('tab-btn-overview'),
+        rules:    document.getElementById('tab-btn-rules'),
+        payloads: document.getElementById('tab-btn-payloads'),
+    };
+    tabs.forEach(t => {
+        const panel = document.getElementById('tab-' + t);
+        const btn   = btns[t];
+        if (!panel || !btn) return;
+        const active = (t === name);
+        panel.style.display = active ? 'block' : 'none';
+        btn.style.borderBottom    = active ? '3px solid #3498db' : '3px solid transparent';
+        btn.style.color           = active ? '#7fb3f5' : '#7f8c8d';
+        btn.style.background      = active ? '#0d2137' : '#16213e';
+        btn.style.fontWeight      = active ? 'bold'   : 'normal';
+    });
+}
+
+// ── 룰 심각도 필터 ──────────────────────────────────────────────────────────
+function filterRules(sev) {
+    document.querySelectorAll('#rules-container .rule-item').forEach(el => {
+        el.style.display = (sev === 'ALL' || el.dataset.sev === sev) ? '' : 'none';
+    });
+    document.querySelectorAll('[id^="rf-"]').forEach(btn => {
+        btn.style.opacity = '0.5';
+    });
+    const active = document.getElementById('rf-' + sev);
+    if (active) active.style.opacity = '1';
+}
+
+</script>
+</body>
+</html>

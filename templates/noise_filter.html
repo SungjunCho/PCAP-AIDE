@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>노이즈 필터 — PCAP Analyzer</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'Segoe UI',Arial,sans-serif; background:#0f1923; color:#e0e0e0; min-height:100vh; }
+
+.top-bar {
+  background:linear-gradient(135deg,#0d2137 0%,#0d3737 100%);
+  padding:14px 28px; display:flex; align-items:center; gap:14px;
+  border-bottom:2px solid #1abc9c;
+}
+.top-bar h1 { font-size:20px; color:#fff; }
+.top-bar .sub { font-size:12px; color:#1abc9c; }
+.top-bar .nav { margin-left:auto; display:flex; gap:12px; }
+.top-bar a { color:#7fb3f5; font-size:13px; text-decoration:none; }
+
+.container { max-width:1100px; margin:0 auto; padding:28px 20px; }
+
+/* 상태 카드 */
+.status-bar {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:14px; margin-bottom:24px;
+}
+.stat-card {
+  background:#16213e; border:1px solid #1a3a4a; border-radius:10px;
+  padding:16px 20px; text-align:center;
+}
+.stat-card .num { font-size:28px; font-weight:bold; color:#1abc9c; }
+.stat-card .lbl { font-size:12px; color:#7f8c8d; margin-top:4px; }
+
+/* 섹션 표 */
+.section-block {
+  background:#16213e; border:1px solid #1a3a4a; border-radius:10px;
+  margin-bottom:18px; overflow:hidden;
+}
+.section-title {
+  background:#0d2137; padding:12px 18px; font-size:13px;
+  font-weight:bold; color:#1abc9c; border-bottom:1px solid #1a3a4a;
+  display:flex; align-items:center; gap:8px;
+}
+.rule-table { width:100%; border-collapse:collapse; font-size:12px; }
+.rule-table th {
+  background:#0d1923; color:#7f8c8d; padding:8px 14px;
+  text-align:left; border-bottom:1px solid #1a3a4a; font-weight:normal;
+}
+.rule-table td { padding:8px 14px; border-bottom:1px solid #0d1923; color:#bdc3c7; }
+.rule-table tr:last-child td { border-bottom:none; }
+.rule-table tr:hover td { background:#1a2a3a; }
+
+.badge-type {
+  display:inline-block; padding:2px 8px; border-radius:3px;
+  font-family:monospace; font-size:11px; font-weight:bold;
+}
+.t-min_length           { background:#1a3a1a; color:#2ecc71; }
+.t-null_ratio           { background:#1a1a3a; color:#9b59b6; }
+.t-repeat_byte          { background:#2a1a3a; color:#e74c3c; }
+.t-pkcs_padding         { background:#3a2a1a; color:#f39c12; }
+.t-seq_pattern          { background:#1a3a3a; color:#1abc9c; }
+.t-non_printable_ratio  { background:#3a1a1a; color:#e67e22; }
+.t-text_exact_nocase    { background:#1a2a3a; color:#3498db; }
+.t-hex_exact            { background:#2a2a1a; color:#f1c40f; }
+.t-hex_prefix           { background:#2a1a2a; color:#e056fd; }
+
+/* 안내 박스 */
+.info-box {
+  background:#0a2d1a; border:1px solid #1a5c38; border-radius:8px;
+  padding:16px 20px; margin-bottom:22px; font-size:13px; color:#7dcea0;
+  line-height:1.8;
+}
+.info-box strong { color:#2ecc71; }
+.info-box code {
+  background:#0d1923; padding:1px 6px; border-radius:3px;
+  font-family:monospace; font-size:11px; color:#f1c40f;
+}
+
+/* 버튼 */
+.btn-reload {
+  background:#1a3a2a; color:#2ecc71; border:1px solid #1a5c38;
+  padding:10px 22px; border-radius:7px; font-size:13px;
+  cursor:pointer; margin-bottom:22px;
+}
+.btn-reload:hover { background:#1e4a32; }
+
+/* 파일 경로 */
+.filepath {
+  font-size:11px; color:#566573; font-family:monospace;
+  margin-bottom:18px;
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>🔇 노이즈 필터</h1>
+  <span class="sub">의미 없는 payload 자동 제외 — 오용탐지 예외처리</span>
+  <div class="nav">
+    <a href="/">← 분석 페이지</a>
+    <a href="/whitelist">🛡️ Whitelist</a>
+    <a href="/keywords">🔑 Keywords</a>
+    <a href="/ai-settings">⚙️ AI 설정</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="info-box">
+    <strong>💡 노이즈 필터란?</strong><br>
+    패킷 분석 파이프라인의 <strong>0a-2단계</strong>에서 의미 없는 payload 를 조기에 제외합니다.
+    <code>global_whitelist.yaml</code>보다 먼저 실행되어 성능과 오탐을 모두 개선합니다.<br><br>
+    규칙 수정은 <code>keywords/noise_filter.yaml</code>을 직접 편집한 후
+    아래 <strong>[재로드]</strong> 버튼을 누르면 서버 재시작 없이 즉시 반영됩니다.<br><br>
+    <strong>처리 순서:</strong>
+    포트 443 차단 → <strong style="color:#1abc9c;">노이즈 필터 ← 여기</strong> →
+    화이트리스트 → 키워드 탐지 → 프로토콜 룰 생성
+  </div>
+
+  <!-- 통계 -->
+  <div class="status-bar">
+    <div class="stat-card">
+      <div class="num">{{ total }}</div>
+      <div class="lbl">활성 규칙 수</div>
+    </div>
+    <div class="stat-card">
+      <div class="num" style="font-size:14px; color:#7fb3f5;">{{ mtime }}</div>
+      <div class="lbl">마지막 수정</div>
+    </div>
+    <div class="stat-card">
+      <div class="num" style="font-size:12px; color:#f1c40f; word-break:break-all;">
+        noise_filter.yaml
+      </div>
+      <div class="lbl">설정 파일</div>
+    </div>
+  </div>
+
+  <button class="btn-reload" onclick="reloadFilter()">🔄 설정 파일 재로드</button>
+
+  <div class="filepath">📄 {{ filepath }}</div>
+
+  <!-- 규칙 테이블 -->
+  {% set type_groups = [
+    ('min_length',          '📏 길이 기반'),
+    ('null_ratio',          '⬛ NULL 바이트 비율'),
+    ('repeat_byte',         '🔁 단일 바이트 반복'),
+    ('pkcs_padding',        '🔒 PKCS 패딩'),
+    ('seq_pattern',         '📈 연속 시퀀스'),
+    ('non_printable_ratio', '🚫 비인쇄 문자 비율'),
+    ('text_exact_nocase',   '🔤 텍스트 완전 일치'),
+    ('hex_exact',           '🔢 HEX 완전 일치'),
+    ('hex_prefix',          '🔍 HEX prefix 매칭'),
+  ] %}
+
+  {% for check_type, section_label in type_groups %}
+  {% set group_rules = rules | selectattr('check_type', 'equalto', check_type) | list %}
+  {% if group_rules %}
+  <div class="section-block">
+    <div class="section-title">
+      <span class="badge-type t-{{ check_type }}">{{ check_type }}</span>
+      {{ section_label }} — {{ group_rules|length }}개 규칙
+    </div>
+    <table class="rule-table">
+      <thead>
+        <tr>
+          <th style="width:60%;">설명</th>
+          <th>판별 값</th>
+          <th style="width:80px; text-align:center;">활성</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rule in group_rules %}
+        <tr>
+          <td>{{ rule.description }}</td>
+          <td><code style="font-family:monospace; font-size:11px; color:#f1c40f;">{{ rule.value }}</code></td>
+          <td style="text-align:center;">
+            {% if rule.enabled %}
+            <span style="color:#27ae60; font-weight:bold;">✅</span>
+            {% else %}
+            <span style="color:#566573;">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+</div>
+
+<div id="toast" style="display:none; position:fixed; bottom:24px; right:24px;
+     padding:12px 22px; border-radius:8px; font-size:13px; font-weight:bold; z-index:9999;"></div>
+
+<script>
+async function reloadFilter() {
+  try {
+    const res  = await fetch('/noise-filter/reload', { method: 'POST' });
+    const data = await res.json();
+    showToast(`✅ 재로드 완료 — ${data.total_rules}개 규칙 활성`, '#1abc9c');
+    setTimeout(() => location.reload(), 900);
+  } catch(e) {
+    showToast('❌ 재로드 실패: ' + e.message, '#e74c3c');
+  }
+}
+function showToast(msg, color) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.background = color;
+  t.style.color = '#fff'; t.style.display = 'block';
+  setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+</script>
+</body>
+</html>

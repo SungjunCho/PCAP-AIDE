@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNS Reputation — PCAP Analyzer</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'Segoe UI',Arial,sans-serif; background:#0f1923; color:#e0e0e0; min-height:100vh; }
+
+.top-bar {
+  background:linear-gradient(135deg,#0d1a37 0%,#1a0d2a 100%);
+  padding:14px 28px; display:flex; align-items:center; gap:14px;
+  border-bottom:2px solid #9b59b6;
+}
+.top-bar h1 { font-size:20px; color:#fff; }
+.top-bar .sub { font-size:12px; color:#9b59b6; }
+.top-bar .nav { margin-left:auto; display:flex; gap:12px; }
+.top-bar a { color:#7fb3f5; font-size:13px; text-decoration:none; }
+
+.container { max-width:1200px; margin:0 auto; padding:28px 20px; }
+
+/* API 키 설정 — 2개 카드 그리드 */
+.api-keys-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:22px;
+}
+@media (max-width:800px) { .api-keys-grid { grid-template-columns:1fr; } }
+
+.api-key-card {
+  background:#16213e; border-radius:12px; padding:20px 22px;
+  display:flex; flex-direction:column; gap:12px;
+}
+.api-key-card.vt-card  { border:1px solid #2c4a6a; }
+.api-key-card.sb-card  { border:1px solid #1a4a2a; }
+
+.api-key-card .card-header {
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;
+}
+.api-key-card .card-title { font-size:14px; font-weight:bold; color:#e0e0e0; }
+.api-key-card .card-badge {
+  font-size:11px; padding:2px 8px; border-radius:10px; white-space:nowrap;
+}
+.badge-vt   { background:#1a2a4a; color:#7fb3f5; border:1px solid #2c4a6a; }
+.badge-wr   { background:#0a2a14; color:#4ade80; border:1px solid #1a5c38; }
+.badge-pri  { font-size:10px; color:#566573; margin-left:4px; }
+
+.api-key-card .input-row {
+  display:flex; gap:8px; align-items:center;
+}
+.vt-key-input {
+  flex:1; padding:9px 12px; background:#0d1923;
+  border:1px solid #2c4a6a; border-radius:6px; color:#e0e0e0;
+  font-size:13px; font-family:monospace; outline:none;
+}
+.vt-key-input:focus { border-color:#9b59b6; }
+.sb-key-input {
+  flex:1; padding:9px 12px; background:#0d1923;
+  border:1px solid #1a5c38; border-radius:6px; color:#e0e0e0;
+  font-size:13px; font-family:monospace; outline:none;
+}
+.sb-key-input:focus { border-color:#27ae60; }
+
+.btn-save-key {
+  background:linear-gradient(135deg,#6c3483,#9b59b6); color:#fff;
+  border:none; padding:9px 18px; border-radius:6px; font-size:13px;
+  font-weight:bold; cursor:pointer; white-space:nowrap;
+}
+.btn-save-key:hover { opacity:0.88; }
+.btn-save-wr {
+  background:linear-gradient(135deg,#1a5c38,#27ae60); color:#fff;
+  border:none; padding:9px 18px; border-radius:6px; font-size:13px;
+  font-weight:bold; cursor:pointer; white-space:nowrap;
+}
+.btn-save-wr:hover { opacity:0.88; }
+
+.key-status { font-size:12px; white-space:nowrap; }
+.key-ok  { color:#27ae60; }
+.key-no  { color:#e74c3c; }
+.api-key-card .card-desc { font-size:12px; color:#566573; line-height:1.6; }
+.api-key-card .card-desc a { color:#7fb3f5; }
+.api-key-card .card-desc .limit { color:#f39c12; }
+
+/* 통계 카드 */
+.stat-grid {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:14px; margin-bottom:22px;
+}
+.stat-card {
+  background:#16213e; border:1px solid #1a3a4a; border-radius:10px;
+  padding:14px 18px; text-align:center;
+}
+.stat-card .num { font-size:26px; font-weight:bold; }
+.stat-card .lbl { font-size:11px; color:#7f8c8d; margin-top:3px; }
+.c-malicious  { color:#e74c3c; }
+.c-suspicious { color:#f39c12; }
+.c-safe       { color:#27ae60; }
+.c-total      { color:#7fb3f5; }
+
+/* 탭 */
+.tabs { display:flex; gap:0; margin-bottom:0; border-bottom:2px solid #1a3a4a; }
+.tab-btn {
+  padding:10px 22px; background:none; border:none; color:#7f8c8d;
+  font-size:13px; cursor:pointer; border-bottom:2px solid transparent;
+  margin-bottom:-2px; transition:all .15s;
+}
+.tab-btn.active { color:#9b59b6; border-bottom-color:#9b59b6; font-weight:bold; }
+.tab-panel { display:none; padding-top:18px; }
+.tab-panel.active { display:block; }
+
+/* 캐시 테이블 */
+.cache-table { width:100%; border-collapse:collapse; font-size:12px; }
+.cache-table th {
+  background:#0d1923; color:#7f8c8d; padding:9px 12px;
+  text-align:left; border-bottom:1px solid #1a3a4a; font-weight:normal;
+  position:sticky; top:0;
+}
+.cache-table td { padding:8px 12px; border-bottom:1px solid #0d1923; }
+.cache-table tr:hover td { background:#1a2a3a; }
+
+.verdict-badge {
+  display:inline-block; padding:2px 9px; border-radius:3px;
+  font-size:11px; font-weight:bold;
+}
+.v-MALICIOUS  { background:#2d0a0a; color:#e74c3c; }
+.v-SUSPICIOUS { background:#2d1a0a; color:#f39c12; }
+.v-SAFE       { background:#0a2d0a; color:#27ae60; }
+.v-UNKNOWN    { background:#1a1a2d; color:#7f8c8d; }
+
+.score-bar {
+  display:inline-block; width:60px; height:6px; background:#1a3a4a;
+  border-radius:3px; vertical-align:middle; overflow:hidden; margin-left:6px;
+}
+.score-fill { height:100%; border-radius:3px; }
+
+.btn-del-cache {
+  background:none; border:1px solid #3a1a1a; color:#e74c3c;
+  font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer;
+}
+.btn-del-cache:hover { background:#2d0a0a; }
+
+/* 화이트리스트 테이블 */
+.wl-table { width:100%; border-collapse:collapse; font-size:12px; }
+.wl-table th {
+  background:#0d1923; color:#7f8c8d; padding:9px 12px;
+  text-align:left; border-bottom:1px solid #1a3a4a; font-weight:normal;
+}
+.wl-table td { padding:7px 12px; border-bottom:1px solid #0d1923; }
+.wl-table tr:hover td { background:#1a2a3a; }
+
+/* 안내 */
+.info-box {
+  background:#1a1040; border:1px solid #6c3483; border-radius:8px;
+  padding:14px 18px; margin-bottom:20px; font-size:12px;
+  color:#d2b4de; line-height:1.8;
+}
+.info-box strong { color:#e8daef; }
+.info-box code {
+  background:#0d1923; padding:1px 6px; border-radius:3px;
+  font-family:monospace; color:#f1c40f; font-size:11px;
+}
+
+.btn-action {
+  background:#1a2a3a; color:#7fb3f5; border:1px solid #2c5f7a;
+  padding:7px 14px; border-radius:6px; font-size:12px; cursor:pointer;
+  margin-right:6px; margin-bottom:10px;
+}
+.btn-action:hover { background:#1f3a4f; }
+
+/* search */
+.search-box {
+  width:280px; padding:7px 12px; background:#0d1923;
+  border:1px solid #2c4a6a; border-radius:6px; color:#e0e0e0;
+  font-size:13px; outline:none; margin-bottom:12px;
+}
+.search-box:focus { border-color:#9b59b6; }
+
+/* toast */
+#toast {
+  position:fixed; bottom:24px; right:24px; padding:12px 22px;
+  border-radius:8px; font-size:13px; font-weight:bold;
+  opacity:0; transition:opacity .3s; pointer-events:none; z-index:9999;
+}
+#toast.show { opacity:1; }
+#toast.ok  { background:#1e8449; color:#fff; }
+#toast.err { background:#a93226; color:#fff; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>🔍 DNS Reputation</h1>
+  <span class="sub">악성 DNS 쿼리 탐지 — 화이트리스트 + VirusTotal</span>
+  <div class="nav">
+    <a href="/">← 분석 페이지</a>
+    <a href="/whitelist">🛡️ Whitelist</a>
+    <a href="/noise-filter">🔇 Noise Filter</a>
+    <a href="/keywords">🔑 Keywords</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- API 키 설정 — VirusTotal + Google Safe Browsing -->
+  <div class="api-keys-grid">
+
+    <!-- VirusTotal 카드 -->
+    <div class="api-key-card vt-card">
+      <div class="card-header">
+        <span class="card-title">🦠 VirusTotal API</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="card-badge badge-vt">1순위</span>
+          <span class="key-status {% if vt_status.configured %}key-ok{% else %}key-no{% endif %}">
+            {% if vt_status.configured %}✅ 설정됨{% if vt_status.masked %} ({{ vt_status.masked }}){% endif %}
+            {% else %}❌ 미설정{% endif %}
+          </span>
+        </div>
+      </div>
+      <div class="input-row">
+        <input type="password" id="vt-key-input" class="vt-key-input"
+               placeholder="{% if vt_status.configured %}● 저장된 키 있음 (변경하려면 입력){% else %}VirusTotal API 키 입력{% endif %}"
+               autocomplete="off">
+        <button onclick="toggleKeyVis('vt')" class="btn-action" style="margin:0;">👁</button>
+        <button onclick="saveVtKey()" class="btn-save-key">💾 저장</button>
+      </div>
+      <div class="card-desc">
+        72개 이상 보안 엔진으로 도메인 평판 조회.
+        <span class="limit">무료: 4 req/분 / 500 req/일</span><br>
+        <a href="https://www.virustotal.com/gui/my-apikey" target="_blank">🔗 무료 API 키 발급</a>
+      </div>
+    </div>
+
+    <!-- Google Safe Browsing 카드 -->
+    <div class="api-key-card sb-card">
+      <div class="card-header">
+        <span class="card-title">🛡️ Google Safe Browsing API</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="card-badge badge-wr">2순위 (VT fallback)</span>
+          <span class="key-status {% if sb_status.configured %}key-ok{% else %}key-no{% endif %}">
+            {% if sb_status.configured %}✅ 설정됨{% if sb_status.masked %} ({{ sb_status.masked }}){% endif %}
+            {% else %}❌ 미설정{% endif %}
+          </span>
+        </div>
+      </div>
+      <div class="input-row">
+        <input type="password" id="sb-key-input" class="sb-key-input"
+               placeholder="{% if sb_status.configured %}● 저장된 키 있음 (변경하려면 입력){% else %}Google Safe Browsing API 키 입력{% endif %}"
+               autocomplete="off">
+        <button onclick="toggleKeyVis('sb')" class="btn-action" style="margin:0;">👁</button>
+        <button onclick="saveSbKey()" class="btn-save-wr">💾 저장</button>
+      </div>
+      <div class="card-desc">
+        VT 키 없음 또는 한도 초과 시 자동 fallback.
+        악성코드·피싱·유해SW 탐지.
+        <span class="limit">무료: 10,000 req/일</span><br>
+        <a href="https://console.cloud.google.com/apis/library/safebrowsing.googleapis.com" target="_blank">🔗 Google Cloud Console → Safe Browsing API 활성화</a>
+      </div>
+    </div>
+
+  </div><!-- /api-keys-grid -->
+
+  <!-- 동작 원리 안내 -->
+  <div class="info-box">
+    <strong>💡 조회 우선순위:</strong>
+    <ol style="margin:8px 0 0 18px; font-size:13px; line-height:1.9; color:#bdc3c7;">
+      <li><strong style="color:#e0e0e0;">화이트리스트</strong> — <code>dns_whitelist.yaml</code> 일치 시 즉시 SAFE</li>
+      <li><strong style="color:#e0e0e0;">캐시</strong> — 메모리(1h) + 디스크 캐시 확인</li>
+      <li><strong style="color:#7fb3f5;">VirusTotal API</strong> — 악성(≥3) → <code>DNS:MALICIOUS</code> / 의심(≥1) → <code>DNS:SUSPICIOUS</code></li>
+      <li><strong style="color:#4ade80;">Google Safe Browsing API</strong> — VT 키 없음·한도 초과 시 자동 fallback. 악성코드·피싱/사기·유해SW·유해앱 탐지</li>
+      <li><strong style="color:#566573;">타이포스쿼팅 패턴</strong> — API 없이도 동형자 치환·위장 키워드 탐지 (항상 동작)</li>
+    </ol>
+  </div>
+
+  <!-- 통계 -->
+  <div class="stat-grid">
+    <div class="stat-card"><div class="num c-total">{{ cache_stats.total }}</div><div class="lbl">캐시된 도메인</div></div>
+    <div class="stat-card"><div class="num c-malicious">{{ cache_stats.malicious }}</div><div class="lbl">악성 판정</div></div>
+    <div class="stat-card"><div class="num c-suspicious">{{ cache_stats.suspicious }}</div><div class="lbl">의심 판정</div></div>
+    <div class="stat-card"><div class="num c-safe">{{ cache_stats.safe }}</div><div class="lbl">정상 판정</div></div>
+    <div class="stat-card"><div class="num" style="color:#bb8fce;">{{ whitelist_domains|length }}</div><div class="lbl">화이트리스트 도메인</div></div>
+  </div>
+
+  <!-- 탭 -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('cache')">📋 평판 캐시</button>
+    <button class="tab-btn" onclick="switchTab('whitelist')">✅ 화이트리스트</button>
+  </div>
+
+  <!-- 탭: 캐시 -->
+  <div class="tab-panel active" id="tab-cache">
+
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+      <input type="text" id="cache-search" class="search-box"
+             placeholder="🔍 도메인 검색..." oninput="filterCache()">
+      <button class="btn-action" onclick="clearMemCache()">🗑️ 메모리 캐시 초기화</button>
+      <button class="btn-action" onclick="reloadWl()">🔄 화이트리스트 재로드</button>
+    </div>
+
+    {% if cache_entries %}
+    <div style="overflow-x:auto; max-height:520px; overflow-y:auto;">
+    <table class="cache-table" id="cache-table">
+      <thead>
+        <tr>
+          <th>도메인</th>
+          <th>판정</th>
+          <th style="width:120px;">VT 점수</th>
+          <th>악성/의심/전체</th>
+          <th>사유</th>
+          <th>캐시 일시</th>
+          <th style="width:60px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in cache_entries %}
+        <tr data-domain="{{ e.domain }}">
+          <td style="font-family:monospace; color:#a8d8f0;">{{ e.domain }}</td>
+          <td><span class="verdict-badge v-{{ e.verdict }}">{{ e.verdict }}</span></td>
+          <td>
+            {{ e.score }}
+            <span class="score-bar">
+              <span class="score-fill" style="width:{{ e.score }}%;
+                background:{% if e.verdict=='MALICIOUS' %}#e74c3c{% elif e.verdict=='SUSPICIOUS' %}#f39c12{% else %}#27ae60{% endif %};"></span>
+            </span>
+          </td>
+          <td style="text-align:center; color:#95a5a6;">
+            <span style="color:#e74c3c;">{{ e.malicious }}</span> /
+            <span style="color:#f39c12;">{{ e.suspicious }}</span> /
+            {{ e.total }}
+          </td>
+          <td style="font-size:11px; color:#7f8c8d; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+              title="{{ e.reason }}">{{ e.reason }}</td>
+          <td style="font-size:11px; color:#566573;">{{ e.cached_at }}</td>
+          <td>
+            <button class="btn-del-cache"
+                    onclick="delCache('{{ e.domain }}', this)">✕</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div style="text-align:center; color:#566573; padding:40px; font-size:13px;">
+      캐시된 도메인이 없습니다.<br>PCAP 파일을 분석하면 DNS 쿼리 결과가 여기에 표시됩니다.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 탭: 화이트리스트 -->
+  <div class="tab-panel" id="tab-whitelist">
+    <p style="font-size:12px; color:#7f8c8d; margin-bottom:12px;">
+      📄 <code style="font-family:monospace;">keywords/dns_whitelist.yaml</code> 을 직접 편집 후
+      [🔄 화이트리스트 재로드] 버튼을 누르면 즉시 반영됩니다.
+    </p>
+    <div style="overflow-x:auto; max-height:520px; overflow-y:auto;">
+    <table class="wl-table">
+      <thead>
+        <tr>
+          <th>도메인</th>
+          <th>카테고리</th>
+          <th>메모</th>
+          <th>exact</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in whitelist_domains %}
+        <tr>
+          <td style="font-family:monospace; color:#a8d8f0;">{{ d.domain }}</td>
+          <td><span style="background:#1a2a3a; color:#7fb3f5; font-size:11px; padding:2px 8px; border-radius:3px;">{{ d.category }}</span></td>
+          <td style="font-size:11px; color:#7f8c8d;">{{ d.note }}</td>
+          <td style="text-align:center; font-size:11px;">
+            {% if d.exact %}<span style="color:#f39c12;">정확 일치</span>
+            {% else %}<span style="color:#27ae60;">서브도메인 포함</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function toggleKeyVis(type) {
+  const inp = document.getElementById(type === 'wr' ? 'sb-key-input' : 'vt-key-input');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function saveVtKey() {
+  const key = document.getElementById('vt-key-input').value.trim();
+  const res  = await fetch('/dns-reputation/vt-key', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({api_key: key}),
+  });
+  const data = await res.json();
+  showToast(data.status === 'ok' ? '✅ VirusTotal API 키 저장 완료' : '❌ 저장 실패', data.status);
+  if (data.status === 'ok') setTimeout(() => location.reload(), 800);
+}
+
+async function saveSbKey() {
+  const key = document.getElementById('sb-key-input').value.trim();
+  const res  = await fetch('/dns-reputation/sb-key', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({api_key: key}),
+  });
+  const data = await res.json();
+  showToast(data.status === 'ok' ? '✅ Google Safe Browsing API 키 저장 완료' : '❌ 저장 실패', data.status);
+  if (data.status === 'ok') setTimeout(() => location.reload(), 800);
+}
+
+async function delCache(domain, btn) {
+  const res  = await fetch('/dns-reputation/cache/delete', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({domain}),
+  });
+  const data = await res.json();
+  if (data.status === 'ok') {
+    btn.closest('tr').remove();
+    showToast(`🗑️ ${domain} 캐시 삭제`, 'ok');
+  }
+}
+
+async function clearMemCache() {
+  const res  = await fetch('/dns-reputation/cache/clear', {method:'POST'});
+  const data = await res.json();
+  showToast(`🗑️ 메모리 캐시 ${data.cleared}개 초기화`, 'ok');
+}
+
+async function reloadWl() {
+  const res  = await fetch('/dns-reputation/whitelist/reload', {method:'POST'});
+  const data = await res.json();
+  showToast(`🔄 화이트리스트 재로드 — ${data.total_domains}개 도메인`, 'ok');
+  setTimeout(() => location.reload(), 800);
+}
+
+function filterCache() {
+  const q = document.getElementById('cache-search').value.toLowerCase();
+  document.querySelectorAll('#cache-table tbody tr').forEach(tr => {
+    const domain = (tr.dataset.domain || '').toLowerCase();
+    tr.style.display = domain.includes(q) ? '' : 'none';
+  });
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + (type === 'ok' ? 'ok' : 'err');
+  setTimeout(() => { t.className = ''; }, 2800);
+}
+</script>
+</body>
+</html>

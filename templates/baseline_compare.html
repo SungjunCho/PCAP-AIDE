@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>PCAP Analyzer — Baseline Comparator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    body { background:#0d1117; color:#c9d1d9; font-family:'Segoe UI',sans-serif; margin:0; }
+    .topbar { background:#161b22; border-bottom:1px solid #30363d; padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
+    .topbar .brand { font-size:18px; font-weight:bold; color:#58a6ff; }
+    .topbar a { color:#8b949e; font-size:13px; text-decoration:none; padding:4px 10px; border-radius:6px; }
+    .topbar a:hover { background:#21262d; color:#c9d1d9; }
+    .container { max-width:1300px; margin:0 auto; padding:28px 20px; }
+    h1 { color:#e6edf3; font-size:22px; margin-bottom:6px; }
+    .subtitle { color:#8b949e; font-size:13px; margin-bottom:28px; }
+
+    /* 입력 패널 */
+    .input-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px; }
+    @media(max-width:900px){ .input-grid { grid-template-columns:1fr; } }
+    .panel { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:20px; }
+    .panel h2 { font-size:14px; color:#58a6ff; margin:0 0 12px; }
+    textarea { width:100%; box-sizing:border-box; background:#0d1117; border:1px solid #30363d;
+               border-radius:6px; color:#c9d1d9; font-family:monospace; font-size:12px;
+               padding:10px; resize:vertical; outline:none; }
+    textarea:focus { border-color:#58a6ff; }
+    .btn { background:linear-gradient(135deg,#1f6feb,#388bfd); color:#fff; border:none;
+           padding:10px 28px; border-radius:6px; font-size:14px; font-weight:bold;
+           cursor:pointer; }
+    .btn:hover { opacity:.88; }
+    .btn-run { background:linear-gradient(135deg,#238636,#2ea043); width:100%; padding:14px; font-size:15px; margin-bottom:24px; }
+    .btn-secondary { background:#21262d; border:1px solid #30363d; color:#c9d1d9; font-size:12px; padding:6px 14px; border-radius:6px; cursor:pointer; }
+    .badge-info { font-size:11px; background:#0d419d; color:#79c0ff; padding:2px 8px; border-radius:10px; }
+
+    /* 베이스라인 추가 */
+    .bl-list { display:flex; flex-direction:column; gap:10px; }
+    .bl-entry { background:#0d1117; border:1px solid #21262d; border-radius:6px; padding:10px 14px; }
+    .bl-entry-header { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+    .bl-label-input { flex:1; background:#161b22; border:1px solid #30363d; border-radius:4px;
+                      color:#c9d1d9; font-size:12px; padding:5px 8px; outline:none; }
+    .btn-del { background:#6e1e1e; color:#ffa198; border:none; border-radius:4px;
+               padding:4px 10px; font-size:11px; cursor:pointer; }
+    .builtin-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .bl-tag { background:#21262d; border:1px solid #30363d; color:#8b949e; font-size:11px;
+              padding:3px 10px; border-radius:12px; cursor:pointer; }
+    .bl-tag.active { background:#1f3a5f; border-color:#388bfd; color:#79c0ff; }
+    .bl-tag:hover { border-color:#58a6ff; }
+
+    /* 결과 */
+    .results-section { display:none; }
+    .results-section.visible { display:block; }
+    .spinner { text-align:center; padding:40px; color:#8b949e; font-size:14px; }
+    .spinner .dot { animation:spin 1s linear infinite; display:inline-block; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* KPI 카드 */
+    .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:24px; }
+    .kpi-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:16px 18px; text-align:center; }
+    .kpi-val { font-size:28px; font-weight:bold; }
+    .kpi-lbl { font-size:12px; color:#8b949e; margin-top:4px; }
+    .kv-blue    { color:#58a6ff; }
+    .kv-green   { color:#3fb950; }
+    .kv-yellow  { color:#d29922; }
+    .kv-purple  { color:#bc8cff; }
+
+    /* 비교 테이블 */
+    .table-wrap { overflow-x:auto; margin-bottom:24px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th { background:#21262d; color:#8b949e; padding:10px 14px; text-align:left; font-size:12px; letter-spacing:.5px; }
+    td { padding:9px 14px; border-bottom:1px solid #21262d; }
+    tr:hover td { background:#161b22; }
+    .highlight-row td { background:#1f2a1a; }
+    .td-num { text-align:right; font-family:monospace; }
+
+    /* 바 차트 */
+    .bar-wrap { display:flex; align-items:center; gap:8px; }
+    .bar-bg   { flex:1; background:#21262d; border-radius:3px; height:8px; }
+    .bar-fill { height:8px; border-radius:3px; }
+    .bar-pcap { background:#388bfd; }
+    .bar-bl   { background:#3fb950; }
+
+    /* 심각도 배지 */
+    .sev-CRITICAL { color:#ff7b72; font-weight:bold; }
+    .sev-HIGH     { color:#f0883e; }
+    .sev-MEDIUM   { color:#d29922; }
+    .sev-LOW      { color:#58a6ff; }
+    .sev-INFO     { color:#8b949e; }
+
+    /* 탭 */
+    .tabs { display:flex; gap:4px; margin-bottom:18px; border-bottom:1px solid #30363d; padding-bottom:0; }
+    .tab  { padding:8px 18px; font-size:13px; cursor:pointer; border-radius:6px 6px 0 0;
+            color:#8b949e; border:1px solid transparent; border-bottom:none; }
+    .tab.active { background:#161b22; color:#c9d1d9; border-color:#30363d; border-bottom:1px solid #161b22; margin-bottom:-1px; }
+    .tab-pane { display:none; }
+    .tab-pane.active { display:block; }
+
+    /* 텍스트 리포트 */
+    .text-report { background:#0d1117; border:1px solid #30363d; border-radius:6px;
+                   padding:16px; font-family:'Courier New',monospace; font-size:11px;
+                   white-space:pre-wrap; color:#8b949e; max-height:500px; overflow-y:auto; }
+
+    /* 토스트 */
+    #toast { position:fixed; bottom:30px; right:30px; background:#238636; color:#fff;
+             padding:12px 22px; border-radius:8px; font-size:13px; display:none; z-index:999; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="brand">🛡️ PCAP Analyzer</span>
+  <a href="/">🏠 홈</a>
+  <a href="/keywords">🔑 Keywords</a>
+  <a href="/whitelist">✅ Whitelist</a>
+  <a href="/dns-reputation">🌐 DNS Rep</a>
+  <a href="/noise-filter">🔇 Noise</a>
+  <a href="/auto-learn">🤖 Auto Learn</a>
+  <a href="/baseline-compare" style="background:#1f3a5f;color:#79c0ff;">📊 Baseline</a>
+  <a href="/ai-settings">⚙️ AI</a>
+</div>
+
+<div class="container">
+  <h1>📊 Baseline Comparator</h1>
+  <p class="subtitle">
+    PCAP-Analyzer 자동 생성 Snort 룰과 ET Open / Snort Community / Suricata 베이스라인을 비교합니다.
+    <span class="badge-info">SCIE 논문 지원</span>
+  </p>
+
+  <!-- 입력 영역 -->
+  <div class="input-grid">
+    <!-- PCAP-Analyzer 룰 입력 -->
+    <div class="panel">
+      <h2>🔬 PCAP-Analyzer Generated Rules</h2>
+      <p style="font-size:12px;color:#8b949e;margin:0 0 10px;">
+        분석 결과의 Snort 룰을 붙여넣거나 아래 버튼으로 현재 세션 룰을 불러오세요.
+      </p>
+      <button class="btn-secondary" onclick="loadSessionRules()" style="margin-bottom:10px;">
+        ⟳ 현재 세션 룰 불러오기
+      </button>
+      <textarea id="pcap-rules" rows="14"
+        placeholder="alert udp any any -> any 53 (msg:&quot;DNS:TYPO+MALICIOUS...&quot;; ...)&#10;alert tcp any any -> any 80 (msg:&quot;HIGH HTTP SQL Injection...&quot;; ...)"></textarea>
+      <div style="margin-top:8px;font-size:12px;color:#8b949e;" id="pcap-rule-count">0개 룰</div>
+    </div>
+
+    <!-- 베이스라인 선택 -->
+    <div class="panel">
+      <h2>📚 Baseline Rulesets</h2>
+      <p style="font-size:12px;color:#8b949e;margin:0 0 10px;">
+        내장 베이스라인을 선택하거나 직접 룰을 추가하세요.
+      </p>
+      <div class="builtin-tags" id="builtin-tags">
+        <span class="bl-tag active" data-label="ET_Open_DNS">ET Open DNS</span>
+        <span class="bl-tag active" data-label="ET_Open_HTTP">ET Open HTTP</span>
+        <span class="bl-tag active" data-label="Snort_Community">Snort Community</span>
+        <span class="bl-tag active" data-label="Suricata_Rules">Suricata</span>
+      </div>
+      <div class="bl-list" id="bl-list"></div>
+      <button class="btn-secondary" onclick="addCustomBaseline()" style="margin-top:10px;">
+        + 커스텀 베이스라인 추가
+      </button>
+
+      <!-- PCAP 시뮬레이션 옵션 -->
+      <div style="margin-top:12px;padding:10px 12px;background:#0d1117;border:1px solid #1f3a5f;border-radius:6px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+          <input type="checkbox" id="use-pcap" style="width:14px;height:14px;">
+          <span>🎯 PCAP 파일 시뮬레이션 (scapy content-match)</span>
+        </label>
+        <div style="font-size:11px;color:#8b949e;margin-top:4px;">
+          체크 시 업로드된 PCAP에 실제 룰을 적용하여 Alert Count / TP / FP / FN / TN 계산
+        </div>
+      </div>
+
+      <!-- 다운로드 -->
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid #21262d;">
+        <div style="font-size:12px;color:#8b949e;margin-bottom:8px;">
+          📥 ET Open 룰 다운로드 <span style="font-size:10px;color:#566573;">(서버에서 rules.emergingthreats.net 접근 필요)</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;" id="dl-buttons"></div>
+        <div id="dl-progress" style="margin-top:8px;font-size:11px;color:#3fb950;"></div>
+      </div>
+
+      <!-- Ground Truth 설정 -->
+      <div style="margin-top:16px;">
+        <div style="font-size:12px;color:#8b949e;margin-bottom:6px;">
+          🎯 Ground Truth 공격 유형 (쉼표 구분, 비우면 자동 추론)
+        </div>
+        <input type="text" id="gt-cats"
+          style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;
+                 border-radius:6px;color:#c9d1d9;font-size:12px;padding:7px 10px;outline:none;"
+          placeholder="DNS, HTTP, FTP, SQL_INJECTION, PHISHING, ...">
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-run" onclick="runComparison()">🚀 비교 분석 실행</button>
+
+  <!-- 결과 -->
+  <div class="results-section" id="results">
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('summary')">📋 Summary</div>
+      <div class="tab" onclick="switchTab('quality')">📈 Quality Metrics</div>
+      <div class="tab" onclick="switchTab('coverage')">🗺️ Coverage</div>
+      <div class="tab" onclick="switchTab('complexity')">🔧 Complexity</div>
+      <div class="tab" onclick="switchTab('overlap')">🔄 Overlap</div>
+      <div class="tab" onclick="switchTab('report')">📄 Text Report</div>
+    </div>
+
+    <!-- Summary -->
+    <div class="tab-pane active" id="pane-summary">
+      <div class="kpi-grid" id="kpi-grid"></div>
+      <div class="table-wrap">
+        <table id="tbl-summary">
+          <thead>
+            <tr>
+              <th>Baseline</th>
+              <th class="td-num">Rules</th>
+              <th class="td-num">Overlap</th>
+              <th class="td-num">Only-PCAP</th>
+              <th class="td-num">Only-BL</th>
+              <th class="td-num">Jaccard ↑</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-summary"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Quality Metrics -->
+    <div class="tab-pane" id="pane-quality">
+      <div class="table-wrap">
+        <table id="tbl-quality">
+          <thead>
+            <tr>
+              <th>System</th>
+              <th class="td-num">Precision ↑</th>
+              <th class="td-num">Recall ↑</th>
+              <th class="td-num">F1-Score ↑</th>
+              <th class="td-num">Specificity ↑</th>
+              <th class="td-num">Uniqueness% ↑</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-quality"></tbody>
+        </table>
+      </div>
+      <p style="font-size:11px;color:#8b949e;margin-top:10px;">
+        ↑ 높을수록 좋음. Precision/Recall은 공격 유형 커버리지 기반 Pseudo 지표입니다.
+        Specificity는 content 패턴의 구체성 점수(0~100)입니다.
+      </p>
+    </div>
+
+    <!-- Coverage -->
+    <div class="tab-pane" id="pane-coverage">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;" id="coverage-grids"></div>
+    </div>
+
+    <!-- Complexity -->
+    <div class="tab-pane" id="pane-complexity">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>System</th>
+              <th class="td-num">Avg Options ↑</th>
+              <th class="td-num">Avg Content Len ↑</th>
+              <th class="td-num">Severity Dist (CRIT/HIGH/MED)</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-complexity"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Overlap -->
+    <div class="tab-pane" id="pane-overlap">
+      <p style="font-size:13px;color:#8b949e;margin-bottom:16px;">
+        Fingerprint(content 패턴 SHA256) 기반 content 겹침 분석입니다.
+        Jaccard = |A∩B| / |A∪B|
+      </p>
+      <div id="overlap-bars"></div>
+    </div>
+
+    <!-- Text Report -->
+    <div class="tab-pane" id="pane-report">
+      <div style="display:flex;gap:10px;margin-bottom:12px;">
+        <button class="btn-secondary" onclick="copyReport()">📋 복사</button>
+        <button class="btn-secondary" onclick="downloadReport()">⬇️ TXT 다운로드</button>
+        <button class="btn-secondary" onclick="downloadJSON()">⬇️ JSON 다운로드</button>
+      </div>
+      <div class="text-report" id="text-report"></div>
+    </div>
+
+  </div><!-- /results -->
+</div><!-- /container -->
+
+<div id="toast"></div>
+
+<script>
+let _lastResult = null;
+
+// ── 탭 전환 ─────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('pane-'+name).classList.add('active');
+}
+
+// ── 베이스라인 태그 토글 ─────────────────────────────────────────────────────
+document.querySelectorAll('.bl-tag').forEach(tag => {
+  tag.addEventListener('click', () => tag.classList.toggle('active'));
+});
+
+// ── 커스텀 베이스라인 추가 ───────────────────────────────────────────────────
+let blIdx = 0;
+function addCustomBaseline() {
+  const idx = blIdx++;
+  const div = document.createElement('div');
+  div.className = 'bl-entry';
+  div.id = 'bl-entry-'+idx;
+  div.innerHTML = `
+    <div class="bl-entry-header">
+      <input class="bl-label-input" id="bl-label-${idx}" placeholder="베이스라인 이름 (예: My_Rules)" value="Custom_${idx+1}">
+      <button class="btn-del" onclick="document.getElementById('bl-entry-${idx}').remove()">✕ 삭제</button>
+    </div>
+    <textarea id="bl-text-${idx}" rows="5" placeholder="Snort/Suricata 룰을 붙여넣으세요&#10;alert udp ..."></textarea>`;
+  document.getElementById('bl-list').appendChild(div);
+}
+
+// ── 현재 세션 룰 불러오기 ────────────────────────────────────────────────────
+async function loadSessionRules() {
+  try {
+    const res = await fetch('/baseline-compare/session-rules');
+    if (!res.ok) { showToast('세션 룰 없음 — 직접 입력하세요', 'warn'); return; }
+    const data = await res.json();
+    document.getElementById('pcap-rules').value = (data.rules || []).join('\n');
+    updateRuleCount();
+    showToast('✅ 세션 룰 로드 완료', 'ok');
+  } catch(e) { showToast('불러오기 실패: '+e.message, 'err'); }
+}
+
+// ── 룰 수 업데이트 ───────────────────────────────────────────────────────────
+function updateRuleCount() {
+  const lines = document.getElementById('pcap-rules').value
+    .split('\n').filter(l => l.trim().startsWith('alert'));
+  document.getElementById('pcap-rule-count').textContent = lines.length + '개 룰';
+}
+document.getElementById('pcap-rules').addEventListener('input', updateRuleCount);
+
+// ── 비교 실행 ───────────────────────────────────────────────────────────────
+async function runComparison() {
+  const rulesText = document.getElementById('pcap-rules').value.trim();
+  if (!rulesText) { showToast('룰을 입력하세요', 'warn'); return; }
+
+  // 활성 내장 베이스라인
+  const activeTags = [...document.querySelectorAll('.bl-tag.active')].map(t => t.dataset.label);
+
+  // 커스텀 베이스라인
+  const customBl = {};
+  document.querySelectorAll('.bl-entry').forEach(entry => {
+    const id  = entry.id.replace('bl-entry-','');
+    const lbl = document.getElementById('bl-label-'+id)?.value?.trim();
+    const txt = document.getElementById('bl-text-'+id)?.value?.trim();
+    if (lbl && txt) customBl[lbl] = txt;
+  });
+
+  // GT cats
+  const gtRaw = document.getElementById('gt-cats').value.trim();
+  const gtCats = gtRaw ? gtRaw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+
+  document.getElementById('results').classList.add('visible');
+  document.getElementById('results').innerHTML = '<div class="spinner"><span class="dot">⚙️</span> 분석 중...</div>';
+
+  try {
+    const res = await fetch('/baseline-compare/run', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ rules_text: rulesText, active_builtins: activeTags,
+                             use_pcap: document.getElementById('use-pcap')?.checked || false,
+                             custom_baselines: customBl, gt_cats: gtCats }),
+    });
+    const data = await res.json();
+    _lastResult = data;
+    renderResults(data);
+  } catch(e) {
+    document.getElementById('results').innerHTML = `<div style="color:#ff7b72;padding:20px;">오류: ${e.message}</div>`;
+  }
+}
+
+// ── 결과 렌더링 ──────────────────────────────────────────────────────────────
+function renderResults(data) {
+  const results = document.getElementById('results');
+  results.innerHTML = `
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('summary')">📋 Summary</div>
+      <div class="tab" onclick="switchTab('quality')">📈 Quality Metrics</div>
+      <div class="tab" onclick="switchTab('coverage')">🗺️ Coverage</div>
+      <div class="tab" onclick="switchTab('complexity')">🔧 Complexity</div>
+      <div class="tab" onclick="switchTab('overlap')">🔄 Overlap</div>
+      <div class="tab" onclick="switchTab('report')">📄 Text Report</div>
+    </div>
+    <div class="tab-pane active" id="pane-summary"></div>
+    <div class="tab-pane" id="pane-quality"></div>
+    <div class="tab-pane" id="pane-coverage"></div>
+    <div class="tab-pane" id="pane-complexity"></div>
+    <div class="tab-pane" id="pane-overlap"></div>
+    <div class="tab-pane" id="pane-report"></div>
+  `;
+
+  const pcap = data.pcap_analyzer;
+  const comps = data.comparisons;
+  const firstComp = Object.values(comps)[0] || {};
+
+  // ── KPI 카드 ────────────────────────────────────────────────────────────────
+  const kpis = [
+    {val: pcap.rule_count,                     lbl:'PCAP-Analyzer Rules', cls:'kv-blue'},
+    {val: Object.keys(comps).length,           lbl:'Baselines Compared',   cls:'kv-green'},
+    {val: (firstComp.f1_a||0).toFixed(3),     lbl:'F1-Score (PCAP)',       cls:'kv-yellow'},
+    {val: (pcap.specificity_score||0).toFixed(1), lbl:'Specificity Score', cls:'kv-purple'},
+    {val: (pcap.uniqueness_ratio||0).toFixed(1)+'%', lbl:'Uniqueness',     cls:'kv-blue'},
+    {val: Object.keys(pcap.proto_coverage||{}).length, lbl:'Protocols Covered', cls:'kv-green'},
+  ];
+  const kpiHtml = kpis.map(k => `
+    <div class="kpi-card">
+      <div class="kpi-val ${k.cls}">${k.val}</div>
+      <div class="kpi-lbl">${k.lbl}</div>
+    </div>`).join('');
+
+  // ── Summary 테이블 ──────────────────────────────────────────────────────────
+  const summaryRows = Object.entries(comps).map(([lbl, r]) => `
+    <tr>
+      <td><b>${lbl}</b></td>
+      <td class="td-num">${r.rules_b_count}</td>
+      <td class="td-num">${r.overlap_count}</td>
+      <td class="td-num">${r.only_in_a}</td>
+      <td class="td-num">${r.only_in_b}</td>
+      <td class="td-num"><b>${r.jaccard_similarity.toFixed(4)}</b></td>
+    </tr>`).join('');
+
+  document.getElementById('pane-summary').innerHTML = `
+    <div class="kpi-grid">${kpiHtml}</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Baseline</th><th class="td-num">Rules</th><th class="td-num">Overlap</th>
+          <th class="td-num">Only-PCAP</th><th class="td-num">Only-BL</th><th class="td-num">Jaccard ↑</th>
+        </tr></thead>
+        <tbody>${summaryRows}</tbody>
+      </table>
+    </div>`;
+
+  // ── Quality Metrics ─────────────────────────────────────────────────────────
+  const qualRows = [
+    `<tr class="highlight-row">
+      <td><b>PCAP-Analyzer</b></td>
+      <td class="td-num">${firstComp.precision_a?.toFixed(4)||'—'}</td>
+      <td class="td-num">${firstComp.recall_a?.toFixed(4)||'—'}</td>
+      <td class="td-num"><b>${firstComp.f1_a?.toFixed(4)||'—'}</b></td>
+      <td class="td-num">${firstComp.specificity_a?.toFixed(2)||'—'}</td>
+      <td class="td-num">${firstComp.uniqueness_a?.toFixed(1)||'—'}%</td>
+    </tr>`
+  ].concat(Object.entries(comps).map(([lbl, r]) =>
+    `<tr>
+      <td>${lbl}</td>
+      <td class="td-num">${r.precision_b.toFixed(4)}</td>
+      <td class="td-num">${r.recall_b.toFixed(4)}</td>
+      <td class="td-num"><b>${r.f1_b.toFixed(4)}</b></td>
+      <td class="td-num">${r.specificity_b.toFixed(2)}</td>
+      <td class="td-num">${r.uniqueness_b.toFixed(1)}%</td>
+    </tr>`
+  )).join('');
+
+  document.getElementById('pane-quality').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>System</th><th class="td-num">Precision ↑</th><th class="td-num">Recall ↑</th>
+          <th class="td-num">F1-Score ↑</th><th class="td-num">Specificity ↑</th><th class="td-num">Uniqueness% ↑</th>
+        </tr></thead>
+        <tbody>${qualRows}</tbody>
+      </table>
+    </div>
+    <p style="font-size:11px;color:#8b949e;margin-top:8px;">
+      ↑ 높을수록 좋음. Precision/Recall은 공격 유형 커버리지 기반 Pseudo 지표.
+      Specificity(0~100)는 content 패턴 구체성.
+    </p>`;
+
+  // ── Coverage ────────────────────────────────────────────────────────────────
+  const protoCov  = pcap.proto_coverage  || {};
+  const attackCov = pcap.attack_coverage || {};
+  const maxProto  = Math.max(...Object.values(protoCov),  1);
+  const maxAttack = Math.max(...Object.values(attackCov), 1);
+
+  const protoRows = Object.entries(protoCov)
+    .sort((a,b) => b[1]-a[1])
+    .map(([p,c]) => `
+      <tr><td>${p.toUpperCase()}</td><td class="td-num">${c}</td>
+        <td><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill bar-pcap" style="width:${c/maxProto*100}%"></div></div></div></td>
+      </tr>`).join('');
+
+  const attackRows = Object.entries(attackCov)
+    .sort((a,b) => b[1]-a[1])
+    .map(([a,c]) => `
+      <tr><td>${a}</td><td class="td-num">${c}</td>
+        <td><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill bar-pcap" style="width:${c/maxAttack*100}%"></div></div></div></td>
+      </tr>`).join('');
+
+  document.getElementById('pane-coverage').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div>
+        <h3 style="color:#58a6ff;font-size:14px;margin-bottom:12px;">Protocol Coverage</h3>
+        <table><thead><tr><th>Protocol</th><th class="td-num">Rules</th><th>Distribution</th></tr></thead>
+          <tbody>${protoRows}</tbody></table>
+      </div>
+      <div>
+        <h3 style="color:#58a6ff;font-size:14px;margin-bottom:12px;">Attack Category Coverage</h3>
+        <table><thead><tr><th>Category</th><th class="td-num">Rules</th><th>Distribution</th></tr></thead>
+          <tbody>${attackRows}</tbody></table>
+      </div>
+    </div>`;
+
+  // ── Complexity ──────────────────────────────────────────────────────────────
+  const sevFmt = (dist) => {
+    const c = (dist['CRITICAL']||0).toFixed(1);
+    const h = (dist['HIGH']||0).toFixed(1);
+    const m = (dist['MEDIUM']||0).toFixed(1);
+    return `<span class="sev-CRITICAL">${c}%</span> / <span class="sev-HIGH">${h}%</span> / <span class="sev-MEDIUM">${m}%</span>`;
+  };
+  const complexRows = [
+    `<tr class="highlight-row">
+      <td><b>PCAP-Analyzer</b></td>
+      <td class="td-num">${firstComp.avg_options_a?.toFixed(2)||'—'}</td>
+      <td class="td-num">${firstComp.avg_content_len_a?.toFixed(2)||'—'}</td>
+      <td>${sevFmt(firstComp.severity_dist_a||{})}</td>
+    </tr>`
+  ].concat(Object.entries(comps).map(([lbl,r]) =>
+    `<tr>
+      <td>${lbl}</td>
+      <td class="td-num">${r.avg_options_b.toFixed(2)}</td>
+      <td class="td-num">${r.avg_content_len_b.toFixed(2)}</td>
+      <td>${sevFmt(r.severity_dist_b)}</td>
+    </tr>`
+  )).join('');
+
+  document.getElementById('pane-complexity').innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>System</th><th class="td-num">Avg Options ↑</th>
+          <th class="td-num">Avg Content Len ↑</th><th>Severity (CRIT / HIGH / MED)</th></tr></thead>
+        <tbody>${complexRows}</tbody>
+      </table>
+    </div>`;
+
+  // ── Overlap ─────────────────────────────────────────────────────────────────
+  const overlapHtml = Object.entries(comps).map(([lbl, r]) => {
+    const jPct = r.jaccard_similarity * 100;
+    return `
+      <div style="margin-bottom:20px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
+          <b>${lbl}</b>
+          <span style="color:#8b949e;font-size:12px;">Jaccard: <b style="color:#58a6ff;">${r.jaccard_similarity.toFixed(4)}</b></span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div style="text-align:center;background:#0d1117;border-radius:6px;padding:12px;">
+            <div style="font-size:24px;font-weight:bold;color:#58a6ff;">${r.overlap_count}</div>
+            <div style="font-size:11px;color:#8b949e;">공통 패턴</div>
+          </div>
+          <div style="text-align:center;background:#0d1117;border-radius:6px;padding:12px;">
+            <div style="font-size:24px;font-weight:bold;color:#3fb950;">${r.only_in_a}</div>
+            <div style="font-size:11px;color:#8b949e;">PCAP-Analyzer 고유</div>
+          </div>
+          <div style="text-align:center;background:#0d1117;border-radius:6px;padding:12px;">
+            <div style="font-size:24px;font-weight:bold;color:#d29922;">${r.only_in_b}</div>
+            <div style="font-size:11px;color:#8b949e;">${lbl} 고유</div>
+          </div>
+        </div>
+        <div class="bar-wrap">
+          <div style="width:80px;font-size:11px;color:#8b949e;">Jaccard</div>
+          <div class="bar-bg" style="height:12px;">
+            <div class="bar-fill bar-pcap" style="width:${jPct}%;height:12px;"></div>
+          </div>
+          <div style="width:50px;font-size:11px;color:#8b949e;text-align:right;">${jPct.toFixed(1)}%</div>
+        </div>
+      </div>`;
+  }).join('');
+  document.getElementById('pane-overlap').innerHTML = overlapHtml;
+
+  // ── Text Report ─────────────────────────────────────────────────────────────
+  document.getElementById('pane-report').innerHTML = `
+    <div style="display:flex;gap:10px;margin-bottom:12px;">
+      <button class="btn-secondary" onclick="copyReport()">📋 복사</button>
+      <button class="btn-secondary" onclick="downloadReport()">⬇️ TXT 다운로드</button>
+      <button class="btn-secondary" onclick="downloadJSON()">⬇️ JSON 다운로드</button>
+    </div>
+    <div class="text-report" id="text-report">${escHtml(data.text_report||'')}</div>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function copyReport() {
+  const el = document.getElementById('text-report');
+  if (!el) return;
+  navigator.clipboard.writeText(el.innerText).then(() => showToast('📋 복사됨', 'ok'));
+}
+function downloadReport() {
+  if (!_lastResult?.text_report) return;
+  const blob = new Blob([_lastResult.text_report], {type:'text/plain'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'baseline_comparison_report.txt'; a.click();
+}
+function downloadJSON() {
+  if (!_lastResult) return;
+  const blob = new Blob([JSON.stringify(_lastResult, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'baseline_comparison.json'; a.click();
+}
+
+// ── 다운로드 기능 ────────────────────────────────────────────────────────────
+async function loadRulesets() {
+  try {
+    const res  = await fetch('/baseline-compare/rulesets');
+    const data = await res.json();
+    const btns = document.getElementById('dl-buttons');
+    if (!btns) return;
+    btns.innerHTML = '';   // 초기화
+
+    const avail  = data.available || [];
+    const cached = data.cached   || [];
+
+    // ET Open / Snort 버튼 — 서버 목록 기준으로 동적 생성
+    const etItems = avail.filter(x => x.id && x.id.startsWith('et_snort_') && x.type === 'single');
+    if (etItems.length) {
+      const etLabel = document.createElement('div');
+      etLabel.style.cssText = 'width:100%;font-size:11px;color:#566573;margin-bottom:6px;';
+      etLabel.textContent   = `● ET Open / Snort (${etItems.length}개):`;
+      btns.appendChild(etLabel);
+      etItems.forEach(item => {
+        const cat      = item.category || item.id.replace('et_snort_','');
+        const isCached = cached.some(c => c.includes(cat.replace('emerging-','')));
+        const btn      = document.createElement('button');
+        btn.className  = 'btn-secondary';
+        btn.style.cssText = isCached ? 'border-color:#3fb950;color:#3fb950;' : '';
+        btn.textContent   = (isCached ? '✅ ' : '⬇️ ') + cat.replace('emerging-','');
+        btn.title         = item.url;
+        btn.onclick = () => downloadBaseline(item.url, item.label, btn, item.url_fallback || null);
+        btns.appendChild(btn);
+      });
+    }
+
+    // GitHub 미러 버튼 — 서버 목록 기준
+    const ghItems = avail.filter(x => x.id && x.id.startsWith('github_'));
+    if (ghItems.length) {
+      const ghLabel = document.createElement('div');
+      ghLabel.style.cssText = 'width:100%;font-size:11px;color:#566573;margin:10px 0 6px;';
+      ghLabel.innerHTML = `● GitHub Mirror <span style="color:#f0883e;">(ET 서버 접근 불가 시)</span> (${ghItems.length}개):`;
+      btns.appendChild(ghLabel);
+      ghItems.forEach(item => {
+        const cat      = item.category || item.id.replace('github_','');
+        const isCached = cached.some(c => c.includes(cat.replace('emerging-','')));
+        const btn      = document.createElement('button');
+        btn.className  = 'btn-secondary';
+        btn.style.cssText = isCached ? 'border-color:#3fb950;color:#3fb950;' : 'border-color:#d29922;color:#d29922;';
+        btn.textContent   = (isCached ? '✅ ' : '🐙 ') + cat.replace('emerging-','');
+        btn.title         = item.url;
+        btn.onclick = () => downloadBaseline(item.url, item.label, btn, null);
+        btns.appendChild(btn);
+      });
+    }
+
+    // 번들 다운로드 버튼
+    const bundleItems = avail.filter(x => x.type === 'bundle');
+    if (bundleItems.length) {
+      const blLabel = document.createElement('div');
+      blLabel.style.cssText = 'width:100%;font-size:11px;color:#566573;margin:10px 0 6px;';
+      blLabel.textContent   = '● 전체 번들 (tar.gz):';
+      btns.appendChild(blLabel);
+      bundleItems.forEach(item => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-secondary';
+        btn.style.cssText = 'border-color:#bc8cff;color:#bc8cff;';
+        btn.textContent   = `📦 ${item.label}`;
+        btn.title         = item.url;
+        btn.onclick = () => downloadBaseline(item.url, item.label, btn, null);
+        btns.appendChild(btn);
+      });
+    }
+
+  } catch(e) {
+    const btns = document.getElementById('dl-buttons');
+    if (btns) btns.innerHTML = '<span style="color:#f0883e;font-size:11px;">룰셋 목록 로드 실패 — 서버 재시작 후 재시도</span>';
+    console.warn('룰셋 목록 로드 실패:', e.message);
+  }
+}
+
+async function downloadBaseline(url, label, btn, fallback_url) {
+  const prog = document.getElementById('dl-progress');
+  btn.disabled = true;
+  btn.textContent = '⏳ 다운로드 중...';
+  prog.textContent = `${label} 다운로드 중...`;
+
+  try {
+    const res  = await fetch('/baseline-compare/download', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url, label, fallback_url: fallback_url || null}),
+    });
+    const data = await res.json();
+    if (data.status !== 'started') {
+      prog.textContent = '오류: ' + (data.msg || '알 수 없음');
+      btn.disabled = false; return;
+    }
+    // 폴링
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      const sr = await fetch('/baseline-compare/download/status');
+      const sd = await sr.json();
+      const st = sd[label];
+      if (!st) return;
+      if (st.status === 'done') {
+        clearInterval(poll);
+        prog.textContent = `✅ ${label}: ${st.msg}`;
+        btn.textContent  = '✅ ' + label.replace('emerging-','');
+        btn.style.borderColor = '#3fb950'; btn.style.color = '#3fb950';
+        btn.disabled = false;
+        showToast('✅ ' + st.msg, 'ok');
+      } else if (st.status === 'error') {
+        clearInterval(poll);
+        prog.textContent = '❌ ' + st.msg;
+        btn.textContent  = '⬇️ 재시도';
+        btn.disabled = false;
+      } else if (st.done && st.total) {
+        const pct = Math.round(st.done/st.total*100);
+        prog.textContent = `${label} 다운로드 중... ${pct}%  (${(st.done/1024).toFixed(0)} KB)`;
+      }
+      if (attempts > 120) clearInterval(poll);
+    }, 1000);
+  } catch(e) {
+    prog.textContent = '오류: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+// 페이지 로드 시 룰셋 목록 가져오기
+document.addEventListener('DOMContentLoaded', () => {
+  loadRulesets();
+});
+
+function showToast(msg, type='ok') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = type === 'err' ? '#6e1e1e' : type === 'warn' ? '#7d4e00' : '#238636';
+  t.style.display = 'block';
+  setTimeout(() => t.style.display='none', 2500);
+}
+</script>
+</body>
+</html>

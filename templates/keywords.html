@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keyword Manager — PCAP Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f6fa; }
+        h1   { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+
+        .toolbar {
+            display: flex; align-items: center; gap: 12px;
+            background: #fff; padding: 14px 20px; border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,.08); margin-bottom: 20px;
+        }
+        .toolbar a    { text-decoration:none; color:#3498db; font-weight:bold; }
+        .toolbar .sep { color:#ccc; }
+        .reload-btn {
+            margin-left:auto; background:#27ae60; color:#fff;
+            border:none; padding:8px 18px; border-radius:5px; cursor:pointer; font-size:13px;
+        }
+        .reload-btn:hover { background:#219a52; }
+
+        .meta-box {
+            background:#fff; border-radius:8px; padding:14px 20px;
+            box-shadow:0 2px 6px rgba(0,0,0,.08); margin-bottom:20px;
+            font-size:13px; color:#555;
+        }
+        .meta-box code { background:#f0f0f0; padding:2px 6px; border-radius:3px; font-size:12px; }
+
+        /* 카테고리 카드 */
+        .cat-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:16px; }
+        .cat-card {
+            background:#fff; border-radius:8px; overflow:hidden;
+            box-shadow:0 2px 6px rgba(0,0,0,.08);
+        }
+        .cat-header {
+            display:flex; align-items:center; gap:10px;
+            padding:12px 16px; cursor:pointer;
+        }
+        .cat-id    { color:#aaa; font-size:11px; min-width:28px; }
+        .cat-name  { flex:1; font-weight:600; font-size:14px; }
+        .cat-count { background:#eef2ff; color:#667eea; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:bold; }
+        .cat-toggle { color:#aaa; font-size:12px; }
+
+        /* 심각도 뱃지 */
+        .sev { padding:2px 9px; border-radius:10px; font-size:11px; font-weight:bold; color:#fff; }
+        .sev-CRITICAL { background:#c0392b; }
+        .sev-HIGH     { background:#d35400; }
+        .sev-MEDIUM   { background:#b7950b; }
+        .sev-LOW      { background:#2471a3; }
+
+        /* 프로토콜 뱃지 */
+        .proto-tag {
+            display:inline-block; padding:1px 7px; border-radius:10px;
+            font-size:10px; font-weight:bold; color:#fff; margin-right:3px;
+            background:#95a5a6;
+        }
+        .proto-HTTP   { background:#3498db; } .proto-DNS    { background:#9b59b6; }
+        .proto-FTP    { background:#e67e22; } .proto-TELNET { background:#e74c3c; }
+        .proto-SMTP   { background:#2ecc71; } .proto-ANY    { background:#7f8c8d; }
+
+        /* 키워드 목록 */
+        .kw-body  { padding:0 16px 14px; display:none; }
+        .kw-list  {
+            background:#f8f9fa; border-radius:5px; padding:10px;
+            max-height:260px; overflow-y:auto;
+            display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:4px;
+        }
+        .kw-item  {
+            background:#fff; border:1px solid #e0e0e0; border-radius:3px;
+            padding:3px 8px; font-family:monospace; font-size:11px;
+            color:#2c3e50; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        }
+        .kw-item:hover { background:#eef2ff; border-color:#667eea; }
+
+        /* 통계 요약 */
+        .summary-bar {
+            display:flex; gap:16px; flex-wrap:wrap;
+            background:#2c3e50; color:#ecf0f1;
+            border-radius:8px; padding:14px 20px; margin-bottom:20px; font-size:14px;
+        }
+        .summary-bar strong { font-size:22px; display:block; }
+
+        .edit-hint {
+            background:#fff3cd; border-left:4px solid #f39c12;
+            padding:10px 16px; border-radius:0 6px 6px 0;
+            font-size:13px; margin-bottom:20px; color:#7d6608;
+        }
+        .edit-hint code { background:#fef9e7; padding:1px 5px; border-radius:3px; }
+    </style>
+</head>
+<body>
+<div class="toolbar">
+    <a href="/">← Back to Analyzer</a>
+    <span class="sep">|</span>
+    <span>🔑 Keyword Manager</span>
+    <button class="reload-btn" onclick="reloadKeywords()">🔄 Reload Keywords File</button>
+</div>
+
+<!-- 파일 경로 안내 -->
+<div class="meta-box">
+    📄 Keyword file : <code>{{ filepath }}</code>
+    &nbsp;&nbsp;|&nbsp;&nbsp;
+    🕒 Last loaded : <code>{{ mtime }}</code>
+</div>
+
+<div class="edit-hint">
+    💡 키워드를 추가·수정하려면 <code>keywords/keywords.yaml</code> 파일을 직접 편집한 뒤
+    <strong>Reload Keywords File</strong> 버튼을 누르세요. 서버 재시작 없이 즉시 반영됩니다.
+</div>
+
+<!-- 통계 요약 -->
+{% set total_kw = categories | sum(attribute='keyword_count') %}
+<div class="summary-bar">
+    <div><strong>{{ categories | length }}</strong> Categories</div>
+    <div><strong>{{ total_kw }}</strong> Total Keywords</div>
+    {% for sev in ['CRITICAL','HIGH','MEDIUM','LOW'] %}
+    {% set cnt = categories | selectattr('severity','equalto', sev) | list | length %}
+    {% if cnt %}
+    <div><strong>{{ cnt }}</strong> {{ sev }}</div>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<!-- 카테고리 카드 그리드 -->
+<div class="cat-grid">
+    {% for cat in categories %}
+    <div class="cat-card">
+        <div class="cat-header" onclick="toggleCat({{ loop.index }})">
+            <span class="cat-id">#{{ cat.category_id }}</span>
+            <span class="cat-name">{{ cat.name }}</span>
+            <span class="sev sev-{{ cat.severity }}">{{ cat.severity }}</span>
+            <span class="cat-count">{{ cat.keyword_count }} kw</span>
+            <span class="cat-toggle" id="icon-{{ loop.index }}">▶</span>
+        </div>
+        <div class="kw-body" id="kw-{{ loop.index }}">
+            <!-- 프로토콜 태그 -->
+            <div style="margin-bottom:8px;">
+                {% for p in cat.protocols %}
+                <span class="proto-tag proto-{{ p }}">{{ p }}</span>
+                {% endfor %}
+            </div>
+            <!-- 키워드 목록 -->
+            <div class="kw-list">
+                {% for kw in cat.keywords %}
+                <div class="kw-item" title="{{ kw }}">{{ kw }}</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div id="toastMsg" style="display:none; position:fixed; bottom:30px; right:30px;
+     background:#27ae60; color:#fff; padding:12px 22px; border-radius:8px;
+     font-size:14px; box-shadow:0 4px 12px rgba(0,0,0,.2); z-index:999;"></div>
+
+<script>
+function toggleCat(id) {
+    const body = document.getElementById('kw-' + id);
+    const icon = document.getElementById('icon-' + id);
+    const open = body.style.display === 'block';
+    body.style.display = open ? 'none' : 'block';
+    icon.textContent   = open ? '▶' : '▼';
+}
+
+async function reloadKeywords() {
+    try {
+        const res  = await fetch('/keywords/reload', { method: 'POST' });
+        const data = await res.json();
+        showToast(`✅ Reloaded — ${data.categories} categories, ${data.total_keywords} keywords`);
+        setTimeout(() => location.reload(), 1200);
+    } catch(e) {
+        showToast('❌ Reload failed: ' + e.message, true);
+    }
+}
+
+function showToast(msg, isError = false) {
+    const t = document.getElementById('toastMsg');
+    t.textContent       = msg;
+    t.style.background  = isError ? '#c0392b' : '#27ae60';
+    t.style.display     = 'block';
+    setTimeout(() => t.style.display = 'none', 3000);
+}
+</script>
+</body>
+</html>
