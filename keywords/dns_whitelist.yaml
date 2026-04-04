@@ -1,0 +1,247 @@
+# =============================================================================
+# PCAP Analyzer — DNS 정상 도메인 화이트리스트
+# =============================================================================
+#
+# 이 파일에 등록된 도메인은 VirusTotal 조회 없이 즉시 "정상"으로 판정됩니다.
+#
+# 규칙:
+#   - 도메인명은 소문자로 입력 (비교 시 자동 소문자 변환)
+#   - 서브도메인 포함 매칭: "windows.com" 등록 시
+#     "update.windows.com", "ctldl.windowsupdate.com" 등 모두 포함
+#   - exact: true 설정 시 해당 도메인만 정확 일치 (서브도메인 제외)
+#   - category 는 표시용 분류명
+# =============================================================================
+
+version: "1.0"
+
+domains:
+
+  # ── Microsoft / Windows Update ─────────────────────────────────────────────
+  - domain: "windowsupdate.com"
+    category: "Microsoft / Windows Update"
+    note: "Windows 업데이트 서버"
+
+  - domain: "microsoft.com"
+    category: "Microsoft"
+    note: "Microsoft 공식 도메인"
+
+  - domain: "microsoftonline.com"
+    category: "Microsoft / Azure AD"
+    note: "Microsoft 365, Azure AD 인증"
+
+  - domain: "windows.com"
+    category: "Microsoft / Windows"
+    note: "Windows 관련 서비스"
+
+  - domain: "msftncsi.com"
+    category: "Microsoft / Network Connectivity"
+    note: "Windows 네트워크 연결 상태 확인"
+
+  - domain: "msecnd.net"
+    category: "Microsoft CDN"
+    note: "Microsoft CDN"
+
+  - domain: "live.com"
+    category: "Microsoft / Live"
+    note: "Microsoft Live 서비스"
+
+  - domain: "azure.com"
+    category: "Microsoft / Azure"
+    note: "Microsoft Azure 클라우드"
+
+  - domain: "azureedge.net"
+    category: "Microsoft / Azure CDN"
+    note: "Azure CDN"
+
+  # ── Google ─────────────────────────────────────────────────────────────────
+  - domain: "google.com"
+    category: "Google"
+    note: "Google 서비스"
+
+  - domain: "googleapis.com"
+    category: "Google / APIs"
+    note: "Google API 서비스"
+
+  - domain: "googleusercontent.com"
+    category: "Google / User Content"
+    note: "Google 사용자 콘텐츠"
+
+  - domain: "gstatic.com"
+    category: "Google / Static"
+    note: "Google 정적 리소스"
+
+  - domain: "googlevideo.com"
+    category: "Google / YouTube CDN"
+    note: "YouTube 동영상 CDN"
+
+  - domain: "youtube.com"
+    category: "Google / YouTube"
+    note: "YouTube"
+
+  - domain: "googletagmanager.com"
+    category: "Google / Analytics"
+    note: "Google Tag Manager"
+
+  # ── Apple ──────────────────────────────────────────────────────────────────
+  - domain: "apple.com"
+    category: "Apple"
+    note: "Apple 공식 도메인"
+
+  - domain: "icloud.com"
+    category: "Apple / iCloud"
+    note: "Apple iCloud 서비스"
+
+  - domain: "aaplimg.com"
+    category: "Apple / CDN"
+    note: "Apple 이미지/CDN"
+
+  - domain: "mzstatic.com"
+    category: "Apple / App Store CDN"
+    note: "App Store 리소스"
+
+  # ── Amazon / AWS ───────────────────────────────────────────────────────────
+  - domain: "amazonaws.com"
+    category: "Amazon / AWS"
+    note: "Amazon Web Services"
+
+  - domain: "amazon.com"
+    category: "Amazon"
+    note: "Amazon 쇼핑"
+
+  - domain: "cloudfront.net"
+    category: "Amazon / CloudFront CDN"
+    note: "Amazon CloudFront CDN"
+
+  - domain: "awsstatic.com"
+    category: "Amazon / AWS Static"
+    note: "AWS 정적 리소스"
+
+  # ── Cloudflare ─────────────────────────────────────────────────────────────
+  - domain: "cloudflare.com"
+    category: "Cloudflare"
+    note: "Cloudflare 서비스"
+
+  - domain: "cloudflare-dns.com"
+    category: "Cloudflare / DNS"
+    note: "Cloudflare DNS"
+
+  - domain: "1dot1dot1dot1.cloudflare-dns.com"
+    category: "Cloudflare / DoH"
+    note: "Cloudflare DNS-over-HTTPS"
+    exact: true
+
+  # ── Meta / Facebook ────────────────────────────────────────────────────────
+  - domain: "facebook.com"
+    category: "Meta / Facebook"
+    note: "Facebook 서비스"
+
+  - domain: "fbcdn.net"
+    category: "Meta / Facebook CDN"
+    note: "Facebook CDN"
+
+  - domain: "whatsapp.com"
+    category: "Meta / WhatsApp"
+    note: "WhatsApp"
+
+  # ── Akamai / CDN ───────────────────────────────────────────────────────────
+  - domain: "akamai.net"
+    category: "Akamai CDN"
+    note: "Akamai CDN"
+
+  - domain: "akamaiedge.net"
+    category: "Akamai CDN Edge"
+    note: "Akamai 엣지 서버"
+
+  - domain: "akamaihd.net"
+    category: "Akamai HD CDN"
+    note: "Akamai HD 콘텐츠"
+
+  - domain: "edgekey.net"
+    category: "Akamai CDN"
+    note: "Akamai 엣지키"
+
+  # ── OS / 시스템 업데이트 ───────────────────────────────────────────────────
+  - domain: "ubuntu.com"
+    category: "Ubuntu / Linux Update"
+    note: "Ubuntu 패키지 서버"
+
+  - domain: "debian.org"
+    category: "Debian / Linux Update"
+    note: "Debian 패키지 서버"
+
+  - domain: "centos.org"
+    category: "CentOS / Linux Update"
+    note: "CentOS 미러"
+
+  - domain: "fedoraproject.org"
+    category: "Fedora / Linux Update"
+    note: "Fedora 패키지 서버"
+
+  # ── DNS 인프라 ─────────────────────────────────────────────────────────────
+  - domain: "dns.google"
+    category: "Google / Public DNS"
+    note: "Google 공개 DNS (8.8.8.8)"
+
+  - domain: "one.one.one.one"
+    category: "Cloudflare / Public DNS"
+    note: "Cloudflare 공개 DNS (1.1.1.1)"
+
+  - domain: "opendns.com"
+    category: "Cisco / OpenDNS"
+    note: "OpenDNS 서비스"
+
+  - domain: "in-addr.arpa"
+    category: "Reverse DNS / PTR Query"
+    note: "IPv4 역방향 DNS 조회 (PTR 레코드) — 모든 IP의 PTR 쿼리 제외"
+
+  # ── 기타 신뢰 도메인 ──────────────────────────────────────────────────────
+  - domain: "github.com"
+    category: "GitHub"
+    note: "GitHub 서비스"
+
+  - domain: "githubusercontent.com"
+    category: "GitHub / CDN"
+    note: "GitHub 정적 콘텐츠"
+
+  - domain: "digicert.com"
+    category: "PKI / Certificate"
+    note: "DigiCert 인증서 서비스"
+
+  - domain: "letsencrypt.org"
+    category: "PKI / Certificate"
+    note: "Let's Encrypt 인증서"
+
+  - domain: "ocsp.sectigo.com"
+    category: "PKI / OCSP"
+    note: "Sectigo OCSP 서버"
+    exact: true
+
+  - domain: "verisign.com"
+    category: "PKI / Verisign"
+    note: "VeriSign 서비스"
+    
+  - domain: "naver.com"
+    category: "Search Engine / Korea"
+    note: "대한민국 검색 엔진"
+    
+  - domain: "daum.net"
+    category: "Search Engine / Korea"
+    note: "대한민국 검색 엔진"
+
+  # ── Streaming / Media ──────────────────────────────────────────────────────
+  - domain: "netflix.com"
+    category: "Streaming / Media"
+    note: "Netflix 스트리밍 서비스"
+
+  # ── Payment / Fintech ──────────────────────────────────────────────────────
+  - domain: "paypal.com"
+    category: "Payment / Fintech"
+    note: "PayPal 결제 서비스"
+
+  # ── 사용자 정의 추가 영역 ──────────────────────────────────────────────────
+  # 아래에 내부망 도메인 또는 추가 신뢰 도메인을 자유롭게 추가하세요.
+  # 예시:
+  # - domain: "internal.company.local"
+  #   category: "Internal"
+  #   note: "사내 DNS"
+  #   exact: true

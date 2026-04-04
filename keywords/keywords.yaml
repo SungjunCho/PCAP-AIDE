@@ -1,0 +1,314 @@
+# =============================================================================
+# PCAP Analyzer — Payload Keyword Detection Rules
+# =============================================================================
+# 형식:
+#   category_id   : 고유 카테고리 ID (룰 SID 그룹 기준)
+#   name          : 카테고리 이름 (표시용)
+#   severity      : CRITICAL / HIGH / MEDIUM / LOW
+#   protocols     : 탐지 대상 프로토콜 목록 (HTTP, FTP, TELNET, SMTP, DNS, ANY)
+#   nocase        : true = 대소문자 무시
+#   is_hex        : true = content를 hex 바이트로 변환 (\x90 → |90|)
+#   keywords      : 탐지할 문자열 목록
+# =============================================================================
+# PCAP Analyzer — Payload Keyword Detection Rules (Blacklist 확장판)
+# =============================================================================
+# 형식: 기존 파일과 동일
+# 추가된 내용:
+#   - Cobalt Strike, AsyncRAT, Gh0st 등 실제 C2 패턴
+#   - LockBit/Conti/Quantum 등 랜섬웨어 흔적
+#   - Spring4Shell, React2Shell 등 최근 RCE
+#   - DNS Tunneling, PowerShell 난독화, RAT handshake 등
+# =============================================================================
+
+categories:
+
+  # ── 1. Command Injection / RCE ─────────────────────────────────────────────
+  - category_id: 1
+    name: "Command Injection / RCE"
+    severity: CRITICAL
+    protocols: [HTTP, FTP, TELNET, ANY]
+    nocase: false
+    is_hex: false
+    keywords:
+      - ";cat /etc/passwd"
+      - ";id"
+      - ";whoami"
+      - ";uname -a"
+      - ";ls -al"
+      - "&& id"
+      - "|| id"
+      - "| id"
+      - "`id`"
+      - "$(id)"
+      - "/bin/sh"
+      - "/bin/bash"
+      - "/bin/zsh"
+      - "/bin/nc"
+      - "/bin/netcat"
+      - "/bin/wget"
+      - "/bin/curl"
+      - "/bin/python"
+      - "/bin/perl"
+      - "wget http://"
+      - "curl http://"
+      - "bash -i"
+      - "chmod +x"
+      - "./a.out"
+      - "powershell -ep bypass"
+      - "powershell -nop -exec bypass"
+      - "Invoke-WebRequest"
+      - "IEX (New-Object Net.WebClient)"
+      - "certutil -urlcache"
+      - "busybox wget"
+
+  # ── 2. Directory Traversal ─────────────────────────────────────────────────
+  - category_id: 2
+    name: "Directory Traversal"
+    severity: HIGH
+    protocols: [HTTP, FTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "../"
+      - "../../"
+      - "../../../"
+      - "/.%2e/"
+      - "..%2f"
+      - "..%252f"
+      - "%2e%2e%2f"
+      - "%2e%2e/"
+      - "/etc/passwd"
+      - "/etc/shadow"
+      - "/boot.ini"
+      - "/windows/win.ini"
+      - "/windows/system32"
+
+  # ── 3. SQL Injection ──────────────────────────────────────────────────────
+  - category_id: 3
+    name: "SQL Injection"
+    severity: HIGH
+    protocols: [HTTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "' OR '1'='1"
+      - "' OR 1=1 --"
+      - "' OR 1=1#"
+      - "' UNION SELECT"
+      - "UNION ALL SELECT"
+      - "information_schema"
+      - "benchmark("
+      - "sleep("
+      - "AND SLEEP("
+      - "WAITFOR DELAY"
+      - "pg_sleep("
+      - "load_file("
+      - "into outfile"
+      - "xp_cmdshell"
+      - "xp_regread"
+
+  # ── 4. XSS ────────────────────────────────────────────────────────────────
+  - category_id: 4
+    name: "XSS (Cross-Site Scripting)"
+    severity: HIGH
+    protocols: [HTTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "<script>"
+      - "</script>"
+      - "javascript:"
+      - "onerror="
+      - "onload="
+      - "alert("
+      - "document.cookie"
+      - "document.location"
+      - "String.fromCharCode("
+      - "eval("
+      - "fromCharCode("
+
+  # ── 5. WebShell Upload ────────────────────────────────────────────────────
+  - category_id: 5
+    name: "WebShell Upload"
+    severity: CRITICAL
+    protocols: [HTTP, FTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "<?php"
+      - "eval("
+      - "system("
+      - "shell_exec("
+      - "passthru("
+      - "cmd.exe"
+      - "powershell"
+      - "<?="
+      - "<?= "
+      - "assert("
+
+  # ── 6. Malicious Scanner / Reconnaissance ────────────────────────────────
+  - category_id: 6
+    name: "Malicious Scanner / Reconnaissance"
+    severity: HIGH
+    protocols: [HTTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "Nmap"
+      - "Nmap Scripting Engine"
+      - "masscan"
+      - "zgrab"
+      - "sqlmap"
+      - "nikto"
+      - "acunetix"
+      - "nessus"
+      - "openvas"
+      - "wpscan"
+      - "dirbuster"
+      - "gobuster"
+      - "feroxbuster"
+      - "nuclei"
+      - "httpx"
+
+  # ── 7. Reverse Shell ─────────────────────────────────────────────────────
+  - category_id: 7
+    name: "Reverse Shell"
+    severity: CRITICAL
+    protocols: [HTTP, TELNET, ANY]
+    nocase: false
+    is_hex: false
+    keywords:
+      - "bash -i >& /dev/tcp"
+      - "nc -e /bin/sh"
+      - "python -c 'import socket"
+      - "perl -e 'use Socket"
+      - "php -r '$sock=fsockopen"
+      - "python -c \"import pty; pty.spawn"
+
+  # ── 8. Log4Shell / JNDI Injection ────────────────────────────────────────
+  - category_id: 8
+    name: "Log4Shell / JNDI Injection"
+    severity: CRITICAL
+    protocols: [HTTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "${jndi:ldap://"
+      - "${jndi:rmi://"
+      - "${jndi:dns://"
+      - "${jndi:ldaps://"
+      - "${jndi:"
+
+  # ── 9. Exploit / Shellcode ───────────────────────────────────────────────
+  - category_id: 9
+    name: "Exploit Shellcode / Buffer Overflow"
+    severity: CRITICAL
+    protocols: [ANY]
+    nocase: false
+    is_hex: true
+    keywords:
+      - "\\x90\\x90\\x90\\x90"
+      - "41414141414141414141"   # AAAA...
+      - "42424242424242424242"   # BBBB...
+      - "43434343434343434343"   # CCCC...
+      - "deadbeefdeadbeef"
+
+  # ── 10. Malware / C2 Communication ───────────────────────────────────────
+  - category_id: 10
+    name: "Malware / C2 Communication"
+    severity: CRITICAL
+    protocols: [HTTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "/gate.php"
+      - "/cmd.php"
+      - "/bot.php"
+      - "/api/v1/bot"
+      - "/checkin"
+      - "/beacon"
+      - "/upload"
+      - "/README.txt"
+      - "/.RANSOM"
+      - "/.README"
+      - "beacon.dll"
+      - "beacon.x64.dll"
+      - "grab_beacon_config"
+      - "Content-Length: %d"
+      - "HTTP/1.1 200 OK \r\nContent-Type: [^\r\n]{0,100}\r\nDate:"
+
+  # ── 11. PowerShell Attack ────────────────────────────────────────────────
+  - category_id: 11
+    name: "PowerShell Attack"
+    severity: HIGH
+    protocols: [HTTP, SMTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "powershell -enc"
+      - "powershell -e "
+      - "Invoke-Expression"
+      - "IEX("
+      - "DownloadString("
+      - "DownloadFile("
+      - "-nop -exec bypass"
+
+  # ── 12. RAT / Remote Access Trojan ───────────────────────────────────────
+  - category_id: 12
+    name: "RAT / Remote Access Trojan"
+    severity: CRITICAL
+    protocols: [HTTP, TCP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "Gh0st"
+      - "AsyncRAT"
+      - "Remcos"
+      - "QuasarRAT"
+      - "njRAT"
+      - "DarkComet"
+
+  # ── 13. Spring4Shell / React2Shell RCE ────────────────────────────────────
+  - category_id: 13
+    name: "Spring4Shell / React2Shell RCE"
+    severity: CRITICAL
+    protocols: [HTTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "class.module.classLoader"
+      - "pre:<%"
+      - "post:;>"
+      - "child_process.execSync"
+      - "reactOnMynuts"
+      - "nuts/x86"
+      - "bolts"
+      - "var res=process.mainModule.require('child_process)"
+
+  # ── 14. DNS Tunneling / Exfiltration ─────────────────────────────────────
+  - category_id: 14
+    name: "DNS Tunneling / Exfiltration"
+    severity: HIGH
+    protocols: [DNS, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - ".dns.tunnel."
+      - ".dnstunnel."
+      - ".i2p"
+      - ".onion"   # Tor 관련도 일부 포함
+
+  # ── 15. Automated Malicious Bot / Downloader ──────────────────────────────
+  - category_id: 15
+    name: "Automated Malicious Bot / Downloader"
+    severity: MEDIUM
+    protocols: [HTTP, ANY]
+    nocase: true
+    is_hex: false
+    keywords:
+      - "ZmEu"                  # 일부 악성 봇 User-Agent
+      - "python-requests/"
+      - "python-urllib/"
+      - "Mozilla/5.0 (compatible; bot"
+      - "libwww-perl"
+      - "lwp-request"

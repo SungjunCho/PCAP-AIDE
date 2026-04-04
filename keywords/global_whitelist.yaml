@@ -1,0 +1,264 @@
+# =============================================================================
+# PCAP Analyzer — Global Whitelist (전체 프로토콜 공통 화이트리스트)
+# =============================================================================
+#
+# 이 파일에 등록된 패턴과 일치하는 패킷은 프로토콜 종류에 관계없이
+# "정상 패킷"으로 판정되어 Snort 룰 생성에서 제외됩니다.
+#
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ 필드 설명                                                               │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ description  : 설명 (사람이 읽기 위한 메모)                             │
+# │ source       : 출처 (OS명, 툴명, 장비명 등)                             │
+# │ protocols    : 적용 프로토콜 목록. 생략하거나 ~ 이면 모든 프로토콜 적용 │
+# │               예) [ICMP]  /  [HTTP, SMTP]  /  ~ (전체)                 │
+# │ match_type   : 매칭 방식 (필수)                                         │
+# │               - payload_hex   : payload 앞부분 hex starts-with 매칭     │
+# │               - payload_text  : payload 내 문자열 포함 여부 (부분 매칭) │
+# │               - payload_exact : payload 전체 hex와 완전 일치            │
+# │               - type_code     : ICMP type/code 조합만으로 정상 판정     │
+# │ value        : 매칭할 값 (hex 또는 문자열)                              │
+# │ icmp_type    : ICMP 전용 — type 번호. 생략 시 모든 type                 │
+# │ icmp_code    : ICMP 전용 — code 번호. 생략 시 모든 code                 │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ 매칭 우선순위: payload_exact > payload_hex > payload_text > type_code   │
+# │ 하나라도 일치 → 정상 판정, 룰 생성 제외                                 │
+# └─────────────────────────────────────────────────────────────────────────┘
+#
+# 파일 수정 후 관리 페이지(/whitelist)에서 [Reload] 버튼을 누르면
+# 서버 재시작 없이 즉시 반영됩니다.
+# =============================================================================
+
+version: "2.0"
+updated: "2025-03-08"
+
+whitelist:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ICMP — Windows ping 기본 패턴 (32 bytes)
+  # hex : 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70
+  #       71 72 73 74 75 76 77 61 62 63 64 65 66 67 68 69
+  # ascii: abcdefghijklmnopqrstuvwabcdefghi
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - description: "Windows ping 기본 payload (32 bytes) — hex 완전 일치"
+    source: "Windows OS (cmd ping / PowerShell Test-Connection)"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_exact
+    value: "6162636465666768696a6b6c6d6e6f707172737475767761626364656667686900"
+
+  - description: "Windows ping 기본 payload — hex prefix 매칭"
+    source: "Windows OS (cmd ping)"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_hex
+    value: "6162636465666768696a6b6c6d6e6f7071727374757677616263646566676869"
+
+  - description: "Windows ping 기본 payload — ASCII text 매칭"
+    source: "Windows OS (cmd ping)"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_text
+    value: "abcdefghijklmnopqrstuvwabcdefghi"
+
+  - description: "Windows ping Echo Reply — 동일 payload (Type 0)"
+    source: "Windows OS (cmd ping reply)"
+    protocols: [ICMP]
+    icmp_type: 0
+    icmp_code: 0
+    match_type: payload_text
+    value: "abcdefghijklmnopqrstuvwabcdefghi"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ICMP — Linux / macOS ping
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - description: "Linux iputils ping 기본 payload"
+    source: "Linux (iputils ping)"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_hex
+    value: "08090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+
+  - description: "macOS / BSD ping 기본 payload"
+    source: "macOS ping"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_hex
+    value: "0809101112131415161718191a1b1c1d1e1f202122232425"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ICMP — 네트워크 장비 keepalive / all-zero
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - description: "Cisco IOS ping (all-zero payload)"
+    source: "Cisco IOS"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_hex
+    value: "00000000000000000000000000000000000000000000"
+
+  - description: "Zero-filled ICMP keepalive (10 bytes)"
+    source: "Generic network device keepalive"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_hex
+    value: "00000000000000000000"
+
+  - description: "Juniper / 장비 Echo Reply all-zero"
+    source: "Juniper / generic device"
+    protocols: [ICMP]
+    icmp_type: 0
+    icmp_code: 0
+    match_type: payload_hex
+    value: "00000000000000000000"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ICMP — 표준 제어 메시지 (RFC 792)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - description: "ICMP TTL Expired in Transit (traceroute)"
+    source: "RFC 792 — traceroute"
+    protocols: [ICMP]
+    icmp_type: 11
+    icmp_code: 0
+    match_type: type_code
+    value: ""
+
+  - description: "ICMP TTL Exceeded fragment reassembly"
+    source: "RFC 792"
+    protocols: [ICMP]
+    icmp_type: 11
+    icmp_code: 1
+    match_type: type_code
+    value: ""
+
+  - description: "ICMP Destination Unreachable — Fragmentation Needed (Path MTU)"
+    source: "RFC 792 Path MTU Discovery"
+    protocols: [ICMP]
+    icmp_type: 3
+    icmp_code: 4
+    match_type: type_code
+    value: ""
+
+  - description: "ICMP Port Unreachable (UDP traceroute 응답)"
+    source: "RFC 792"
+    protocols: [ICMP]
+    icmp_type: 3
+    icmp_code: 3
+    match_type: type_code
+    value: ""
+
+  - description: "ICMP Redirect Message"
+    source: "RFC 792"
+    protocols: [ICMP]
+    icmp_type: 5
+    match_type: type_code
+    value: ""
+
+  - description: "ICMP Timestamp Request"
+    source: "RFC 792"
+    protocols: [ICMP]
+    icmp_type: 13
+    icmp_code: 0
+    match_type: type_code
+    value: ""
+
+  - description: "ICMP Timestamp Reply"
+    source: "RFC 792"
+    protocols: [ICMP]
+    icmp_type: 14
+    icmp_code: 0
+    match_type: type_code
+    value: ""
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ICMP — 모니터링 / NMS 도구
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - description: "Nagios / Zabbix ICMP 헬스체크 (small zero payload)"
+    source: "Nagios / Zabbix"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_hex
+    value: "0000000000000000"
+
+  - description: "PRTG Network Monitor ICMP probe"
+    source: "PRTG"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_text
+    value: "PRTG"
+
+  - description: "SolarWinds ICMP probe"
+    source: "SolarWinds"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_text
+    value: "SolarWinds"
+
+  - description: "AWS VPC 헬스체크 ICMP (6 bytes zero)"
+    source: "AWS VPC"
+    protocols: [ICMP]
+    icmp_type: 8
+    icmp_code: 0
+    match_type: payload_hex
+    value: "000000000000"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # HTTP — 정상 응답 패턴
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - description: "HTTP 200 OK 정상 응답"
+    source: "RFC 7230 HTTP/1.1"
+    protocols: [HTTP]
+    match_type: payload_text
+    value: "HTTP/1.1 200 OK"
+
+  - description: "HTTP 304 Not Modified (캐시 정상 응답)"
+    source: "RFC 7230"
+    protocols: [HTTP]
+    match_type: payload_text
+    value: "HTTP/1.1 304 Not Modified"
+
+  - description: "HTTP OPTIONS preflight (CORS 사전 요청)"
+    source: "RFC 7231 CORS"
+    protocols: [HTTP]
+    match_type: payload_text
+    value: "OPTIONS"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # DNS — 정상 쿼리 패턴
+  # ──────────────────────────────────────────────────────────────────────────
+
+  - description: "DNS 표준 A 레코드 쿼리 헤더 패턴"
+    source: "RFC 1035"
+    protocols: [DNS]
+    match_type: payload_hex
+    value: "0001000000010000"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 사용자 정의 추가 영역
+  # 아래에 자유롭게 정상 패턴을 추가하세요.
+  # ──────────────────────────────────────────────────────────────────────────
+  #
+  # 예시:
+  # - description: "사내 모니터링 시스템 ICMP 헬스체크"
+  #   source: "Internal NMS"
+  #   protocols: [ICMP]
+  #   icmp_type: 8
+  #   icmp_code: 0
+  #   match_type: payload_text
+  #   value: "MY-HEALTHCHECK"
+

@@ -1,0 +1,275 @@
+greenfigbooks.com:
+  verdict: MALICIOUS
+  score: 28
+  malicious: 9
+  suspicious: 0
+  total: 94
+  categories:
+  - Phishing (alphaMountain.ai)
+  reason: 'VirusTotal: 9/94 엔진 악성 판정'
+  cached_at: '2026-03-15 20:52:11'
+1.63.126.168.in-addr.arpa:
+  verdict: SAFE
+  score: 0
+  malicious: 0
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 악성 판정 없음 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:32'
+google-login.com:
+  verdict: MALICIOUS
+  score: 28
+  malicious: 9
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 9/94 엔진 악성 판정'
+  cached_at: '2026-03-16 18:10:33'
+g00gle.com:
+  verdict: MALICIOUS
+  score: 15
+  malicious: 5
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 5/94 엔진 악성 판정'
+  cached_at: '2026-03-16 18:10:33'
+googie.com:
+  verdict: SUSPICIOUS
+  score: 3
+  malicious: 1
+  suspicious: 0
+  total: 94
+  categories:
+  - social networking
+  - travel
+  reason: 'VirusTotal: 1 악성/0 의심 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:34'
+amazon-secure.com:
+  verdict: SUSPICIOUS
+  score: 3
+  malicious: 1
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 1 악성/0 의심 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:34'
+amaz0n.com:
+  verdict: SUSPICIOUS
+  score: 3
+  malicious: 1
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 1 악성/0 의심 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:35'
+microsoft-update.cfd:
+  verdict: MALICIOUS
+  score: 10
+  malicious: 3
+  suspicious: 1
+  total: 94
+  categories:
+  - Suspicious (alphaMountain.ai)
+  reason: 'VirusTotal: 3/94 엔진 악성 판정, 의심 1개'
+  cached_at: '2026-03-16 18:10:35'
+rnicrosoft.com:
+  verdict: MALICIOUS
+  score: 53
+  malicious: 16
+  suspicious: 2
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 16/94 엔진 악성 판정, 의심 2개'
+  cached_at: '2026-03-16 18:10:36'
+appie.com:
+  verdict: MALICIOUS
+  score: 19
+  malicious: 6
+  suspicious: 0
+  total: 94
+  categories:
+  - misc
+  - malicious web sites
+  - Malicious (alphaMountain.ai)
+  reason: 'VirusTotal: 6/94 엔진 악성 판정'
+  cached_at: '2026-03-16 18:10:37'
+netflix.com:
+  verdict: SAFE
+  score: 0
+  malicious: 0
+  suspicious: 0
+  total: 94
+  categories:
+  - video hosting
+  - entertainment
+  - streaming media
+  reason: 'VirusTotal: 악성 판정 없음 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:38'
+icloud-verify.com:
+  verdict: MALICIOUS
+  score: 28
+  malicious: 9
+  suspicious: 0
+  total: 94
+  categories:
+  - Phishing (alphaMountain.ai)
+  reason: 'VirusTotal: 9/94 엔진 악성 판정'
+  cached_at: '2026-03-16 18:10:38'
+faceb00k.com:
+  verdict: MALICIOUS
+  score: 41
+  malicious: 13
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 13/94 엔진 악성 판정'
+  cached_at: '2026-03-16 18:10:39'
+facebo0k.com:
+  verdict: MALICIOUS
+  score: 20
+  malicious: 6
+  suspicious: 1
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 6/94 엔진 악성 판정, 의심 1개'
+  cached_at: '2026-03-16 18:10:40'
+instagrarn.com:
+  verdict: SUSPICIOUS
+  score: 3
+  malicious: 1
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 1 악성/0 의심 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:41'
+youtube-download.net:
+  verdict: SAFE
+  score: 0
+  malicious: 0
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 악성 판정 없음 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:41'
+youtub3.com:
+  verdict: SAFE
+  score: 0
+  malicious: 0
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 악성 판정 없음 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:42'
+netflix-account.com:
+  verdict: MALICIOUS
+  score: 35
+  malicious: 11
+  suspicious: 0
+  total: 94
+  categories:
+  - phishing and fraud
+  - Phishing and Other Frauds
+  reason: 'VirusTotal: 11/94 엔진 악성 판정'
+  cached_at: '2026-03-16 18:10:42'
+netfl1x.com:
+  verdict: SUSPICIOUS
+  score: 4
+  malicious: 1
+  suspicious: 1
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 1 악성/1 의심 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:43'
+paypal.com:
+  verdict: SAFE
+  score: 0
+  malicious: 0
+  suspicious: 0
+  total: 94
+  categories:
+  - financial data and services
+  - finance & investment
+  - financial services
+  - onlinepay
+  reason: 'VirusTotal: 악성 판정 없음 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:44'
+paypal-verification.com:
+  verdict: MALICIOUS
+  score: 41
+  malicious: 13
+  suspicious: 0
+  total: 94
+  categories:
+  - Phishing (alphaMountain.ai)
+  - phishing and other frauds
+  - phishing and fraud
+  - Phishing and Other Frauds
+  reason: 'VirusTotal: 13/94 엔진 악성 판정'
+  cached_at: '2026-03-16 18:10:45'
+paypa1.com:
+  verdict: MALICIOUS
+  score: 47
+  malicious: 15
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 15/94 엔진 악성 판정'
+  cached_at: '2026-03-16 18:10:45'
+github-security.com:
+  verdict: SUSPICIOUS
+  score: 6
+  malicious: 2
+  suspicious: 0
+  total: 94
+  categories:
+  - Phishing (alphaMountain.ai)
+  reason: 'VirusTotal: 2 악성/0 의심 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:46'
+daum.net:
+  verdict: SUSPICIOUS
+  score: 3
+  malicious: 1
+  suspicious: 0
+  total: 94
+  categories:
+  - portal sites
+  - Malware Sites
+  - Content Servers, Search Engines/Portals (alphaMountain.ai)
+  - social networking
+  - portals
+  reason: 'VirusTotal: 1 악성/0 의심 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:46'
+naver.com:
+  verdict: SAFE
+  score: 0
+  malicious: 0
+  suspicious: 0
+  total: 94
+  categories: []
+  reason: 'VirusTotal: 악성 판정 없음 (94개 엔진 검사)'
+  cached_at: '2026-03-16 18:10:47'
+instagram.com:
+  verdict: SUSPICIOUS
+  score: 3
+  malicious: 1
+  suspicious: 0
+  total: 94
+  categories:
+  - social networks
+  - social networking
+  - socialnetworks
+  reason: 'VirusTotal: 1 악성/0 의심 (94개 엔진 검사)'
+  cached_at: '2026-03-17 11:21:22'
+instagram-login.net:
+  verdict: MALICIOUS
+  score: 90
+  malicious: 1
+  suspicious: 0
+  total: 1
+  categories:
+  - 피싱/사기
+  reason: 'Google Safe Browsing: 피싱/사기 탐지'
+  orig_source: safebrowsing
+  cached_at: '2026-03-17 14:56:05'
