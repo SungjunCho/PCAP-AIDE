@@ -256,6 +256,36 @@ _BRAND_SAFE_DOMAINS = {
     'amazontrust.com', 'amazonsmile.com',                  # Amazon 정상
     'netflixstudios.com',                                  # Netflix 정상
     'facebookincubator.github.io',                         # Meta/Facebook 정상
+    # 정상 기업 도메인 — -secure/-login 등의 서브도메인을 오탐 방지
+    'oracle.com', 'oraclecloud.com', 'oracleimg.com',      # Oracle 공식
+    'salesforce.com', 'force.com', 'salesforceliveagent.com',  # Salesforce
+    'adobe.com', 'adobelogin.com', 'adobedtm.com',        # Adobe
+    'zoom.us', 'zoomgov.com',                              # Zoom
+    'slack.com', 'slack-edge.com',                         # Slack
+    'atlassian.com', 'atlassian.net', 'jira.com',          # Atlassian
+    'twitch.tv', 'twitchapps.com',                         # Twitch
+    'spotify.com',                                          # Spotify
+    'ebay.com', 'ebayimg.com',                             # eBay
+    'samsung.com', 'samsungcloud.com',                     # Samsung
+    'lg.com', 'lgtvsdp.com',                               # LG
+    'skype.com', 'teams.microsoft.com',                    # MS Teams/Skype
+}
+
+# oracle.com처럼 서브도메인 전체를 safe로 처리할 도메인 접미사
+_SAFE_DOMAIN_SUFFIXES = {
+    '.oracle.com', '.oraclecloud.com',
+    '.salesforce.com', '.force.com',
+    '.adobe.com',
+    '.zoom.us',
+    '.slack.com',
+    '.atlassian.com', '.atlassian.net',
+    '.samsung.com',
+    '.lg.com',
+    '.skype.com',
+    '.microsoft.com', '.microsoftonline.com',
+    '.google.com', '.googleapis.com',
+    '.amazon.com', '.amazonaws.com',
+    '.apple.com', '.icloud.com',
 }
 
 _SUSPICIOUS_KEYWORDS = {
@@ -328,6 +358,10 @@ def _check_typosquatting(domain: str) -> dict | None:
     # 브랜드 canonical 도메인 자체도 제외
     if domain_low in _BRAND_DOMAINS.values():
         return None
+    # 정상 기업 서브도메인 접미사 매칭 (예: *.oracle.com → 제외)
+    for suffix in _SAFE_DOMAIN_SUFFIXES:
+        if domain_low.endswith(suffix) or domain_low == suffix.lstrip('.'):
+            return None
 
     parts = domain_low.split('.')
     if len(parts) < 2:
@@ -502,7 +536,7 @@ def parse_dns_payload(packet, payload: bytes) -> dict:
                 info["typosquatting"] = typo
                 info["suspicious_patterns"].append("TYPOSQUATTING")
 
-        # ── DNS Reputation 체크 (화이트리스트 → 캐시 → VirusTotal) ───────
+        # ── DNS Reputation 체크 (화이트리스트 → 캐시 → SB → VirusTotal) ──
         if name and not info["is_response"]:   # 응답 패킷은 조회 제외
             rep = _dns_rep_check(name)
             info["dns_reputation"] = rep
@@ -510,6 +544,14 @@ def parse_dns_payload(packet, payload: bytes) -> dict:
                 info["suspicious_patterns"].append("MALICIOUS_DOMAIN")
             elif rep["verdict"] == "SUSPICIOUS":
                 info["suspicious_patterns"].append("SUSPICIOUS_DOMAIN_VT")
+            elif rep["verdict"] == "SAFE":
+                # SB 또는 VT가 SAFE 판정 → TYPOSQUATTING 오탐 억제
+                # (정상 기업 도메인이 -secure 등 키워드 포함할 수 있음)
+                if "TYPOSQUATTING" in info["suspicious_patterns"]:
+                    info["suspicious_patterns"].remove("TYPOSQUATTING")
+                    info["typosquatting"] = None
+                    info.setdefault("suppressed_by", []).append(
+                        f"TYPOSQUATTING suppressed: {rep['source']} SAFE")
 
     except Exception:
         pass
@@ -1277,7 +1319,19 @@ def generate_rules_for_packet(packet, payload: bytes, rule_id: int, frame_no: in
             _dns_info = parse_dns_payload(packet, payload)
             _qname    = _dns_info.get("query_name", "")
             if _qname:
+                _qname_low = _qname.lower().rstrip(".")
+
+                # 1) dns_whitelist.yaml 등록 도메인
                 _wl_entry = _dns_wl_check(_qname)
+
+                # 2) _SAFE_DOMAIN_SUFFIXES 등록 기업 서브도메인
+                #    (*.oracle.com, *.salesforce.com 등 — 타이포스쿼팅 오탐 방지 목록과 공유)
+                if not _wl_entry:
+                    for _sfx in _SAFE_DOMAIN_SUFFIXES:
+                        if _qname_low.endswith(_sfx) or _qname_low == _sfx.lstrip("."):
+                            _wl_entry = {"category": f"Trusted Enterprise ({_sfx.lstrip('.')})"}
+                            break
+
                 if _wl_entry:
                     return {
                         "protocol":              protocol,
@@ -1292,7 +1346,7 @@ def generate_rules_for_packet(packet, payload: bytes, rule_id: int, frame_no: in
                         "kw_rules":              [],
                         "skipped_reason":        f"DNS whitelist: {_qname} ({_wl_entry.get('category', '')})",
                         "wl_matched":            True,
-                        "wl_reason":             f"dns_whitelist.yaml: {_qname}",
+                        "wl_reason":             f"dns_whitelist / safe_suffix: {_qname}",
                     }
     kw_result   = _kw_detect(payload, protocol, dst_port, frame_no)
     kw_detected = bool(kw_result["matched_keywords"])
