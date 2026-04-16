@@ -38,6 +38,13 @@ fallback_on_error: true       # true: 현재 공급자 실패 시 다음 공급�
 
 providers:
 
+  - id: deepseek
+    label: "DeepSeek"
+    priority: 3
+    enabled: false
+    api_key: ""          # https://platform.deepseek.com/api_keys
+    model: ""            # 기본: deepseek-chat
+    
   - id: claude
     label: "Claude (Anthropic)"
     priority: 1
@@ -51,13 +58,6 @@ providers:
     enabled: false
     api_key: ""          # https://platform.openai.com/api-keys
     model: "gpt-4o-mini" # 또는 gpt-4o
-
-  - id: deepseek
-    label: "DeepSeek"
-    priority: 3
-    enabled: false
-    api_key: ""          # https://platform.deepseek.com/api_keys
-    model: ""            # 기본: deepseek-chat
 
   - id: grok
     label: "Grok (xAI)"
