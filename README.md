@@ -1,5 +1,31 @@
 # PCAP-AIDE (Pruned Version)
 
+<!-- LATEST_CHANGES_START -->
+## What's New in PCAP-AIDE (Compared to PCAP-Analyzer)
+
+PCAP-AIDE is a **pruned and research-optimized** version of PCAP-Analyzer, specifically prepared for academic paper writing and SCIE/KCI journal submissions.
+
+### Key Improvements & New Features
+
+- **Clean & Pruned Codebase**: Removed unnecessary commit history and experimental code for better readability and reproducibility.
+- **Baseline Comparator Engine** (`baseline_comparator.py`):  
+  Newly added core module that automatically compares AI-generated Snort rules with official baselines (Snort Community Rules and Emerging Threats Open rules).  
+  Provides comprehensive quantitative metrics (Precision, Recall, F1-Score, FPR, Jaccard Similarity, etc.) ideal for Evaluation sections in SCIE papers.
+- **Paper-specific Experiment Scripts**:  
+  `experiment_paper1.py`, `experiment_paper2.py`, `experiment_paper3.py` — Ready-to-run scripts for the three planned papers.
+- **Enhanced Rule Management**: Automatic download and parsing of public rule sets (Emerging Threats, Snort Community) with local caching.
+- **New Engine**: `file_reputation_engine.py` for file extraction and reputation analysis.
+- **Improved Modular Architecture**: All detection engines are highly modularized for easier extension and ablation studies.
+- **Research Focus**: Optimized for academic use with better documentation, experiment reproducibility, and evaluation capabilities.
+
+### Core Features (Updated)
+- Automated Snort/Suricata signature generation using multi-LLM consensus and rule engines
+- Multiple detection engines (Noise Filter, Auto-Learn, Keyword, Protocol, DNS Reputation, Whitelist, **Baseline Comparator**)
+- Advanced multi-LLM integration (Claude, GPT, Grok, etc.)
+- Web-based UI with single/multi-file analysis modes
+- Comprehensive evaluation framework for academic papers
+<!-- LATEST_CHANGES_END -->
+
 **AI-Driven IDS Signature Generation and Evaluation System**
 
 This repository is a **pruned (cleaned)** version created specifically for academic paper writing and further research.
