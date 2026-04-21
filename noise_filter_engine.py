@@ -249,6 +249,42 @@ def _check_hex_prefix(payload: bytes, value: str) -> bool:
 # 3. 메인 판별 함수
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+def _compute_shannon_entropy(payload: bytes) -> float:
+    """
+    Shannon Entropy 계산.
+    H = -Σ p_i * log2(p_i)  (0 ≤ H ≤ 8)
+    - 완전 랜덤/암호화 트래픽: H ≈ 7.5~8.0
+    - 일반 텍스트/ASCII:       H ≈ 3.5~5.0
+    - 반복 패턴:               H ≈ 0~2.0
+    논문 3.2절 기준: H ≥ 4.5 → High-Entropy Noise 판정
+    """
+    if not payload:
+        return 0.0
+    counts = [0] * 256
+    for b in payload:
+        counts[b] += 1
+    n = len(payload)
+    entropy = 0.0
+    for c in counts:
+        if c > 0:
+            p = c / n
+            import math
+            entropy -= p * math.log2(p)
+    return round(entropy, 4)
+
+
+def _check_shannon_entropy(payload: bytes, threshold: float = 4.5) -> tuple[bool, float]:
+    """
+    Shannon Entropy 기반 High-Entropy Noise 탐지.
+    threshold: 4.5 (논문 3.2절 기준값)
+    암호화·랜덤 트래픽은 H ≥ 4.5 이상을 보임.
+    단, DNS/HTTP 프로토콜은 호출하지 말 것 (wire format 특성상 오탐).
+    """
+    entropy = _compute_shannon_entropy(payload)
+    return entropy >= float(threshold), entropy
+
+
 def _check_irregularity_score(payload: bytes, threshold) -> tuple[bool, float]:
     """
     payload 의 불규칙성 점수를 계산하여 임계값 이상이면 True 반환.

@@ -9,9 +9,12 @@ protocol_rule_engine.py
 
 from scapy.all import IP, IPv6, TCP, UDP, ICMP, Raw, DNS, DNSQR, DNSRR
 from whitelist_engine import check_global_whitelist
-from noise_filter_engine import is_noise
+from noise_filter_engine import is_noise, _compute_shannon_entropy, _check_shannon_entropy
+from file_reputation_engine import analyze_file_in_packet, get_file_rep_summary
 from dns_reputation_engine import check_domain as _dns_rep_check, _check_whitelist as _dns_wl_check
 import re
+import yaml
+from pathlib import Path
 from keyword_rule_engine import detect_and_build_rules as _kw_detect
 
 
@@ -151,18 +154,13 @@ def parse_http_payload(payload: bytes) -> dict:
                 info["user_agent"] = line.split(":", 1)[1].strip()
 
         text_upper = text.upper()
-        if "${JNDI:" in text_upper:
-            info["suspicious_patterns"].append("LOG4J_INJECTION")
-        if re.search(r"(\.\./|\.\.\\){2,}", text):
-            info["suspicious_patterns"].append("PATH_TRAVERSAL")
-        if re.search(r"(<script|javascript:|onerror=)", text, re.I):
-            info["suspicious_patterns"].append("XSS")
-        if re.search(r"(union\s+select|or\s+1=1|drop\s+table)", text, re.I):
-            info["suspicious_patterns"].append("SQL_INJECTION")
-        if "/WEB-INF/" in text or "/etc/passwd" in text:
-            info["suspicious_patterns"].append("SENSITIVE_PATH")
-        if re.search(r"cmd(\.exe)?|/bin/(sh|bash)", text, re.I):
-            info["suspicious_patterns"].append("COMMAND_EXECUTION")
+        # ── HTTP 공격 패턴 탐지 (keywords/http_attack_patterns.yaml 기반) ──
+        for _pat_def in _load_http_patterns():
+            pid = _pat_def.get('pattern_id', '')
+            if pid and pid not in info['suspicious_patterns']:
+                if _match_http_pattern(_pat_def, text, text_upper):
+                    info['suspicious_patterns'].append(pid)
+
 
         # ── User-Agent 의심 패턴 탐지 ─────────────────────────────────────
         ua = info.get("user_agent", "")
@@ -219,6 +217,71 @@ _UA_PATTERNS: list[tuple] = [
 #   2. 위장 키워드 하이픈: -login, -secure, -verify, -account 등
 #   3. 의심 TLD: .cfd, .xyz, .top, .tk, .ml, .ga, .cf 등
 #   4. 알려진 브랜드 이름 포함 + 추가 문자
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HTTP 공격 패턴 YAML 로더
+# keywords/http_attack_patterns.yaml 에서 탐지 패턴과 Snort 룰 옵션을 로드
+# ══════════════════════════════════════════════════════════════════════════════
+
+_HTTP_PATTERN_FILE = Path(__file__).parent / "keywords" / "http_attack_patterns.yaml"
+_http_patterns:     list = []
+_http_pattern_mtime: float = 0.0
+
+
+def _load_http_patterns() -> list:
+    """http_attack_patterns.yaml 로드 (변경 감지 시 자동 재로드)"""
+    global _http_patterns, _http_pattern_mtime
+    try:
+        mtime = _HTTP_PATTERN_FILE.stat().st_mtime
+        if mtime == _http_pattern_mtime and _http_patterns:
+            return _http_patterns
+        with _HTTP_PATTERN_FILE.open(encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        _http_patterns = [p for p in data.get("patterns", []) if p.get("enabled", True)]
+        _http_pattern_mtime = mtime
+        print(f"[HTTP Patterns] 로드 완료 — {len(_http_patterns)}개 패턴")
+    except Exception as e:
+        print(f"[HTTP Patterns] 로드 실패: {e}")
+    return _http_patterns
+
+
+def _match_http_pattern(pattern_def: dict, text: str, text_upper: str) -> bool:
+    """
+    단일 패턴 정의를 텍스트에 매칭.
+    detection.type 에 따라 다른 매칭 방법 사용.
+    """
+    det     = pattern_def.get("detection", {})
+    dtype   = det.get("type", "regex")
+    nocase  = det.get("nocase", True)
+    flags   = re.IGNORECASE if nocase else 0
+    target  = text_upper if dtype == "contains_upper" else text
+
+    if dtype in ("regex", "contains_upper"):
+        pat = det.get("pattern", "")
+        if not pat:
+            return False
+        if dtype == "contains_upper":
+            return pat.upper() in text_upper
+        return bool(re.search(pat, target, flags))
+
+    elif dtype == "contains":
+        pat = det.get("pattern", "")
+        return (pat.lower() in text.lower()) if nocase else (pat in text)
+
+    elif dtype == "multi_contains":
+        patterns = det.get("patterns", [])
+        target_c = text.lower() if nocase else text
+        return any((p.lower() if nocase else p) in target_c for p in patterns)
+
+    elif dtype == "smuggling":
+        pat1 = det.get("pattern", "")
+        pat2 = det.get("pattern2", "")
+        if nocase:
+            return pat1.lower() in text.lower() and pat2.lower() in text.lower()
+        return pat1 in text and pat2 in text
+
+    return False
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 타이포스쿼팅 / 피싱 도메인 패턴 탐지 (VT 독립적)
@@ -522,8 +585,18 @@ def parse_dns_payload(packet, payload: bytes) -> dict:
         name = info["query_name"]
         if len(name) > 50:
             info["suspicious_patterns"].append("LONG_DOMAIN")
-        if re.search(r"[0-9a-f]{20,}", name, re.I):
-            info["suspicious_patterns"].append("DNS_TUNNELING")
+        # DNS 터널링 탐지 (entropy 기반 고도화)
+        if name:
+            labels = name.split(".")
+            # 방법 1: 서브도메인 길이 ≥ 32자 (high-entropy 서브도메인)
+            long_labels = [l for l in labels if len(l) >= 32]
+            # 방법 2: 서브도메인이 hex/base64 패턴 (20자 이상)
+            hex_labels  = [l for l in labels if re.match(r"^[0-9a-f]{20,}$", l, re.I)]
+            b64_labels  = [l for l in labels if re.match(r"^[A-Za-z0-9+/]{20,}={0,2}$", l)]
+            # 방법 3: 전체 도메인 길이 ≥ 60자
+            total_long  = len(name) >= 60
+            if long_labels or hex_labels or b64_labels or total_long:
+                info["suspicious_patterns"].append("DNS_TUNNELING")
         if re.search(r"(malware|botnet|c2|cnc|rat\.|shell\.)", name, re.I):
             info["suspicious_patterns"].append("SUSPICIOUS_DOMAIN")
         if info["query_type"] == 16:
@@ -579,6 +652,13 @@ def parse_ftp_payload(payload: bytes) -> dict:
         arg = info["argument"]
         if cmd == "USER" and arg.lower() in ("root", "admin", "administrator"):
             info["suspicious_patterns"].append("PRIVILEGED_LOGIN_ATTEMPT")
+        if cmd == "USER" and arg.lower() in ("anonymous", "ftp", "guest"):
+            info["suspicious_patterns"].append("ANONYMOUS_LOGIN_ATTEMPT")
+        if cmd == "PORT":
+            # FTP Bounce Attack: PORT 명령으로 외부 호스트 지정
+            info["suspicious_patterns"].append("FTP_PORT_COMMAND")
+            if re.search(r"PORT\s+(?!192\.168|10\.|172\.(1[6-9]|2[0-9]|3[01]))", arg):
+                info["suspicious_patterns"].append("FTP_BOUNCE_ATTEMPT")
         if cmd == "PASS":
             info["suspicious_patterns"].append("FTP_PASSWORD_TRANSMITTED")
         if re.search(r"(\.\./|\.\.\\)", arg):
@@ -683,6 +763,18 @@ def parse_smtp_payload(payload: bytes) -> dict:
         rcpt_count = text.upper().count("RCPT TO:")
         if rcpt_count > 10:
             info["suspicious_patterns"].append(f"MASS_RECIPIENTS({rcpt_count})")
+        # Open Relay 탐지: 외부→외부 relay (from/to 도메인 불일치)
+        if info["from_addr"] and info["to_addr"]:
+            from_domain = info["from_addr"].split("@")[-1].lower() if "@" in info["from_addr"] else ""
+            to_domain   = info["to_addr"].split("@")[-1].lower()   if "@" in info["to_addr"]   else ""
+            if from_domain and to_domain and from_domain != to_domain:
+                info["suspicious_patterns"].append("SMTP_OPEN_RELAY_ATTEMPT")
+        # Reply-To 스푸핑 탐지
+        for line in lines:
+            if re.match(r"(?i)^Reply-To:", line):
+                rt_addr = line.split(":", 1)[-1].strip()
+                if info["from_addr"] and rt_addr and rt_addr != info["from_addr"]:
+                    info["suspicious_patterns"].append("SMTP_REPLY_TO_SPOOF")
     except Exception:
         pass
     return info
@@ -745,19 +837,15 @@ def build_http_rules(app: dict, hdr: dict, rule_id: int, frame_no: int) -> list:
         )
         rule_id += 1
 
+    # ── Snort 룰 옵션: keywords/http_attack_patterns.yaml 기반 동적 로드 ──────
+    _http_pats    = _load_http_patterns()
     pattern_rules = {
-        "LOG4J_INJECTION":   ("CRITICAL Log4Shell Exploit Attempt",
-                              'content:"${jndi:"; http_uri; nocase; '),
-        "PATH_TRAVERSAL":    ("HIGH HTTP Path Traversal Attempt",
-                              'content:"../"; http_uri; distance:0; '),
-        "XSS":               ("HIGH HTTP XSS Attempt",
-                              'content:"<script"; http_uri; nocase; '),
-        "SQL_INJECTION":     ("HIGH HTTP SQL Injection Attempt",
-                              'content:"union"; http_uri; nocase; content:"select"; distance:0; nocase; '),
-        "SENSITIVE_PATH":    ("MEDIUM HTTP Sensitive Path Access",
-                              'content:"/WEB-INF/"; http_uri; '),
-        "COMMAND_EXECUTION": ("CRITICAL HTTP Remote Command Execution",
-                              'content:"cmd.exe"; http_uri; nocase; '),
+        p["pattern_id"]: (
+            p["snort_rule"]["msg"],
+            p["snort_rule"]["options"],
+        )
+        for p in _http_pats
+        if "snort_rule" in p
     }
     for pat in app["suspicious_patterns"]:
         if pat == "SUSPICIOUS_UA":
@@ -891,6 +979,61 @@ def build_dns_rules(app: dict, hdr: dict, rule_id: int, frame_no: int) -> list:
     return rules
 
 
+
+def parse_icmp_payload(packet, payload: bytes) -> dict:
+    """ICMP 패킷 분석 — 터널링·대형 패킷·스윕 탐지"""
+    info = {
+        "icmp_type": -1, "icmp_code": -1,
+        "payload_size": len(payload),
+        "suspicious_patterns": [],
+    }
+    try:
+        from scapy.all import ICMP as _ICMP
+        if _ICMP in packet:
+            info["icmp_type"] = int(packet[_ICMP].type)
+            info["icmp_code"] = int(packet[_ICMP].code)
+    except Exception:
+        pass
+
+    size = len(payload)
+    # Large ICMP: payload > 1024 bytes (Ping of Death 전조)
+    if size > 1024:
+        info["suspicious_patterns"].append("LARGE_ICMP")
+    # ICMP Tunnel: payload에 HTTP/TCP 상위 프로토콜 헤더 포함
+    if size > 64 and (b"HTTP/" in payload or b"GET " in payload[:8]
+                      or b"POST " in payload[:8] or b"SSH-" in payload[:8]):
+        info["suspicious_patterns"].append("ICMP_TUNNEL")
+    # ICMP Echo Sweep (itype=8, 소형 패킷)
+    if info["icmp_type"] == 8 and size <= 64:
+        info["suspicious_patterns"].append("ICMP_SWEEP")
+    return info
+
+
+def build_icmp_rules(app: dict, hdr: dict, rule_id: int, frame_no: int) -> list:
+    """ICMP 탐지 Snort 룰 생성"""
+    rules    = []
+    patterns = app.get("suspicious_patterns", [])
+    pat_map  = {
+        "LARGE_ICMP":  ("HIGH ICMP Large Packet (Ping of Death Precursor)",
+                        "itype:8; dsize:>1024; "),
+        "ICMP_TUNNEL": ("HIGH ICMP Tunneling Detected",
+                        'itype:8; dsize:>64; content:"HTTP/"; nocase; '),
+        "ICMP_SWEEP":  ("MEDIUM ICMP Echo Sweep / Ping Scan",
+                        "itype:8; icode:0; "),
+    }
+    for pat in patterns:
+        if pat in pat_map:
+            msg_label, opts = pat_map[pat]
+            rules.append(
+                f"# Frame {frame_no}\n"
+                f"alert icmp any any -> any any "
+                f'(msg:"{msg_label}"; '
+                f"{opts}"
+                f"sid:{rule_id}; rev:1;)"
+            )
+            rule_id += 1
+    return rules
+
 def build_ftp_rules(app: dict, hdr: dict, rule_id: int, frame_no: int) -> list:
     """FTP 전용 룰 — 실제 목적지 포트 포함, 기본값 21"""
     rules = []
@@ -921,7 +1064,11 @@ def build_ftp_rules(app: dict, hdr: dict, rule_id: int, frame_no: int) -> list:
                                      'content:".exe"; nocase; '),
         "FTP_LOGIN_FAILURE":        ("MEDIUM FTP Login Failure (530)",
                                      'content:"530"; depth:3; '),
-    }
+            "ANONYMOUS_LOGIN_ATTEMPT": ("MEDIUM FTP Anonymous Login Attempt",
+                              'content:"USER anonymous"; nocase; '),
+        "FTP_BOUNCE_ATTEMPT":      ("HIGH FTP Bounce Attack Attempt",
+                              'content:"PORT "; nocase; '),
+        }
     for pat in app["suspicious_patterns"]:
         if pat in pattern_rules:
             label, content_opt = pattern_rules[pat]
@@ -1012,7 +1159,11 @@ def build_smtp_rules(app: dict, hdr: dict, rule_id: int, frame_no: int) -> list:
                                       'content:"verify your account"; nocase; '),
         "BASE64_ENCODED_ATTACHMENT": ("MEDIUM SMTP Base64 Encoded Attachment",
                                       'content:"Content-Transfer-Encoding"; nocase; content:"base64"; distance:0; nocase; '),
-    }
+            "SMTP_OPEN_RELAY_ATTEMPT": ("HIGH SMTP Open Relay Attempt",
+                               'content:"RCPT TO:"; nocase; content:"@"; distance:0; '),
+        "SMTP_REPLY_TO_SPOOF":    ("MEDIUM SMTP Reply-To Header Spoofing",
+                               'content:"Reply-To:"; nocase; '),
+        }
     for pat in app["suspicious_patterns"]:
         if pat in pattern_rules:
             label, content_opt = pattern_rules[pat]
@@ -1395,10 +1546,15 @@ def generate_rules_for_packet(packet, payload: bytes, rule_id: int, frame_no: in
         raw_rules = build_smtp_rules(app_info, hdr, rule_id, frame_no)
 
     elif protocol == "ICMP":
-        # 화이트리스트 미일치 ICMP → 의심 패턴 분석 후 룰 생성
-        raw_rules, app_info = _build_icmp_rules_inline(
-            packet, payload, icmp_type, icmp_code, hdr, rule_id, frame_no
+        # 신규: parse_icmp_payload + build_icmp_rules (LARGE/TUNNEL/SWEEP)
+        app_info  = parse_icmp_payload(packet, payload)
+        raw_rules = build_icmp_rules(app_info, hdr, rule_id, frame_no)
+        # 기존 inline 분석 결과도 병합 (Tunnel 패턴 등)
+        inline_rules, inline_info = _build_icmp_rules_inline(
+            packet, payload, icmp_type, icmp_code, hdr, rule_id + len(raw_rules), frame_no
         )
+        raw_rules.extend(inline_rules)
+        app_info.update({k: v for k, v in inline_info.items() if k not in app_info})
 
     else:
         generic   = build_generic_rule(hdr, payload, rule_id, frame_no)
@@ -1420,6 +1576,37 @@ def generate_rules_for_packet(packet, payload: bytes, rule_id: int, frame_no: in
         return True
 
     rules = [r for r in raw_rules if r is not None and _content_in_range(r)]
+
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 파일 평판 분석 (HTTP/FTP/SMTP 실행파일 추출 → VT 해시 조회 → 룰 생성)
+    # file_reputation_engine.py 가 처리하며 VT API 키가 없으면 스킵됩니다.
+    # ══════════════════════════════════════════════════════════════════════
+    if protocol in ("HTTP", "FTP", "SMTP") and payload:
+        try:
+            _file_rep = analyze_file_in_packet(
+                payload  = payload,
+                protocol = protocol,
+                hdr      = hdr,
+                frame_no = frame_no,
+                rule_id  = rule_id,
+            )
+            if _file_rep["rules"]:
+                raw_rules.extend(_file_rep["rules"])
+                rule_id = _file_rep["next_rule_id"]
+            if _file_rep["verdicts"]:
+                for _v in _file_rep["verdicts"]:
+                    if _v.verdict in ("MALICIOUS", "SUSPICIOUS"):
+                        app_info.setdefault("file_verdicts", []).append({
+                            "filename":  _v.filename,
+                            "sha256":    _v.sha256,
+                            "verdict":   _v.verdict,
+                            "malicious": _v.malicious,
+                            "total":     _v.total,
+                            "reason":    _v.reason,
+                        })
+        except Exception as _fe:
+            pass
 
     return {
         "protocol":              protocol,

@@ -796,8 +796,11 @@ def baseline_compare_session_rules():
 
 @app.route('/baseline-compare/rulesets', methods=['GET'])
 def baseline_compare_rulesets():
-    cached = list(get_cached_baselines().keys())
-    return jsonify({'available': list_available_rulesets(), 'cached': cached})
+    import importlib, baseline_comparator as _bc
+    importlib.reload(_bc)
+    from baseline_comparator import list_available_rulesets as _lar, get_cached_baselines as _gcb
+    cached = list(_gcb().keys())
+    return jsonify({'available': _lar(), 'cached': cached})
 
 
 @app.route('/baseline-compare/download', methods=['POST'])
