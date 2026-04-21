@@ -115,9 +115,6 @@ categories:
     nocase: true
     is_hex: false
     keywords:
-      - "<script>"
-      - "</script>"
-      - "javascript:"
       - "onerror="
       - "onload="
       - "alert("

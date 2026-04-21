@@ -273,3 +273,13 @@ instagram-login.net:
   reason: 'Google Safe Browsing: 피싱/사기 탐지'
   orig_source: safebrowsing
   cached_at: '2026-03-17 14:56:05'
+javadl-esd-secure.oracle.com:
+  verdict: SAFE
+  score: 0
+  malicious: 0
+  suspicious: 0
+  total: 1
+  categories: []
+  reason: 'Google Safe Browsing: 위협 없음'
+  orig_source: safebrowsing
+  cached_at: '2026-04-04 13:47:47'

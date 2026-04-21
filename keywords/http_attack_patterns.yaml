@@ -1,0 +1,362 @@
+version: '1.1'
+patterns:
+- pattern_id: LOG4J_INJECTION
+  name: Log4Shell Exploit Attempt
+  cve: CVE-2021-44228
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: contains_upper
+    pattern: '${JNDI:'
+    nocase: true
+  snort_rule:
+    msg: CRITICAL Log4Shell Exploit Attempt (CVE-2021-44228)
+    options: 'content:"${jndi:"; http_uri; nocase; '
+- pattern_id: PATH_TRAVERSAL
+  name: HTTP Path Traversal Attempt
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (\.\./|%2e%2e){2,}
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP Path Traversal Attempt
+    options: 'content:"../"; http_uri; distance:0; '
+- pattern_id: XSS
+  name: HTTP Cross-Site Scripting Attempt
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (<script|javascript:|onerror=|onload=|<img[^>]+src\s*=|alert\()
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP XSS Attempt
+    options: 'content:"<script"; http_uri; nocase; '
+- pattern_id: SQL_INJECTION
+  name: HTTP SQL Injection Attempt
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (union\s+select|or\s+1\s*=\s*1|drop\s+table|insert\s+into|xp_cmdshell|information_schema)
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP SQL Injection Attempt
+    options: 'content:"union"; http_uri; nocase; content:"select"; distance:0; nocase; '
+- pattern_id: SENSITIVE_PATH
+  name: HTTP Sensitive Path Access
+  cve: ''
+  severity: MEDIUM
+  enabled: true
+  detection:
+    type: multi_contains
+    patterns:
+    - /WEB-INF/
+    - /etc/passwd
+    - /etc/shadow
+    - /proc/self
+    - /var/log
+    - wp-config.php
+    - .env
+    - .git/
+    nocase: true
+  snort_rule:
+    msg: MEDIUM HTTP Sensitive Path Access
+    options: 'content:"/WEB-INF/"; http_uri; '
+- pattern_id: COMMAND_EXECUTION
+  name: HTTP Remote Command Execution
+  cve: ''
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: regex
+    pattern: (cmd(\.exe)?|/bin/(sh|bash|zsh)|powershell|whoami|id;|;id\b)
+    nocase: true
+  snort_rule:
+    msg: CRITICAL HTTP Remote Command Execution
+    options: 'content:"cmd.exe"; http_uri; nocase; '
+- pattern_id: SSRF
+  name: HTTP Server-Side Request Forgery
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (@(127\.0\.0\.1|localhost|169\.254\.169\.254)|url=(https?://|file://|dict://|gopher://)|redirect=https?://[^/])
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP SSRF Attempt
+    options: 'content:"169.254.169.254"; http_uri; nocase; '
+- pattern_id: XXE
+  name: HTTP XML External Entity Injection
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (<!ENTITY|SYSTEM\s+file://|<!DOCTYPE)
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP XXE Injection Attempt
+    options: 'content:"<!ENTITY"; http_client_body; nocase; '
+- pattern_id: SSTI
+  name: HTTP Server-Side Template Injection
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (\{\{|\{%|\$\{[^}]+\}|#\{|<%=)
+    nocase: false
+  snort_rule:
+    msg: HIGH HTTP SSTI Attempt
+    options: 'content:"{{"; http_uri; content:"}}"; distance:0; '
+- pattern_id: SHELLSHOCK
+  name: HTTP Shellshock Exploit
+  cve: CVE-2014-6271
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: regex
+    pattern: \(\s*\)\s*\{
+    nocase: false
+  snort_rule:
+    msg: CRITICAL HTTP Shellshock Exploit (CVE-2014-6271)
+    options: 'content:"() {"; http_header; '
+- pattern_id: SPRING4SHELL
+  name: Spring4Shell Remote Code Execution
+  cve: CVE-2022-22965
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: regex
+    pattern: (class\.module\.classLoader|spring\.cloud\.function\.routing-expression)
+    nocase: true
+  snort_rule:
+    msg: CRITICAL Spring4Shell Exploit (CVE-2022-22965)
+    options: 'content:"class.module.classLoader"; http_uri; nocase; '
+- pattern_id: OPEN_REDIRECT
+  name: HTTP Open Redirect Attempt
+  cve: ''
+  severity: MEDIUM
+  enabled: true
+  detection:
+    type: regex
+    pattern: (next=|redirect=|url=|return=|returnto=|redir=|dest=|goto=)(https?://|//)[^\s"&]+
+    nocase: true
+  snort_rule:
+    msg: MEDIUM HTTP Open Redirect Attempt
+    options: 'content:"redirect=http"; http_uri; nocase; '
+- pattern_id: HTTP_SMUGGLING
+  name: HTTP Request Smuggling Attempt
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: smuggling
+    pattern: Transfer-Encoding
+    pattern2: Content-Length
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP Request Smuggling Attempt
+    options: 'content:"Transfer-Encoding"; http_header; nocase; content:"chunked";
+      distance:0; nocase; '
+- pattern_id: IDOR
+  name: HTTP IDOR Attempt
+  cve: ''
+  severity: MEDIUM
+  enabled: true
+  detection:
+    type: regex
+    pattern: (file=\.\.\/|document=|attachment=|download\?file=|path=\.\.\/)
+    nocase: true
+  snort_rule:
+    msg: MEDIUM HTTP IDOR Attempt
+    options: 'content:"file="; http_uri; nocase; '
+- pattern_id: DIR_BRUTEFORCE
+  name: HTTP Directory Brute-Force
+  cve: ''
+  severity: MEDIUM
+  enabled: true
+  detection:
+    type: regex
+    pattern: (admin|administrator|wp-admin|phpmyadmin|\.git|\.svn|backup|config)\s*/?$
+    nocase: true
+  snort_rule:
+    msg: MEDIUM HTTP Directory Brute-Force Attempt
+    options: 'content:"/.git"; http_uri; nocase; '
+- pattern_id: CRLF_INJECTION
+  name: HTTP CRLF Injection / Response Splitting
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (%0d%0a|%0a%0d|\r\n.*(?:Set-Cookie|Location|Content-Type):|%0d%0aHTTP/)
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP CRLF Injection / Response Splitting Attempt
+    options: 'content:"%0d%0a"; http_uri; nocase; '
+- pattern_id: HOST_HEADER_INJECTION
+  name: HTTP Host Header Injection
+  cve: ''
+  severity: MEDIUM
+  enabled: true
+  detection:
+    type: regex
+    pattern: Host:\s*(localhost|127\.0\.0\.1|169\.254\.169\.254|@|<|>|'|\")
+    nocase: true
+  snort_rule:
+    msg: MEDIUM HTTP Host Header Injection Attempt
+    options: 'content:"Host: "; http_header; content:"@"; distance:0; '
+- pattern_id: NOSQL_INJECTION
+  name: HTTP NoSQL Injection (MongoDB)
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (\$where|\$gt|\$lt|\$ne|\$regex|\$or|\$and|\{\s*"\$).*
+    nocase: false
+  snort_rule:
+    msg: HIGH HTTP NoSQL Injection Attempt
+    options: 'content:"$where"; http_uri; nocase; '
+- pattern_id: LDAP_INJECTION
+  name: HTTP LDAP Injection
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (\*\)\(|\)\(|\(\||\(&|objectClass=\*|,dc=|,ou=|,cn=)(.*?)(\)|%29)
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP LDAP Injection Attempt
+    options: 'content:"objectClass="; http_uri; nocase; '
+- pattern_id: WEBSHELL_UPLOAD
+  name: HTTP Webshell File Upload Attempt
+  cve: ''
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: regex
+    pattern: filename=["\']?[^"\']+\.(php|asp|aspx|jsp|jspx|cgi|pl|sh|bash)["\']?
+    nocase: true
+  snort_rule:
+    msg: CRITICAL HTTP Webshell Upload Attempt
+    options: 'content:"filename="; http_client_body; nocase; content:".php"; distance:0;
+      nocase; '
+- pattern_id: JWT_MANIPULATION
+  name: HTTP JWT Token Manipulation
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*)(?:.*alg.*none|.*"alg"\s*:\s*"none")
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP JWT Algorithm None Attack
+    options: 'content:"alg"; http_header; content:"none"; distance:0; nocase; '
+- pattern_id: JAVA_DESERIALIZATION
+  name: HTTP Java Insecure Deserialization
+  cve: ''
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: regex
+    pattern: (rO0AB|%ac%ed%00%05|aced0005|java\.io\.Serializable|org\.apache\.commons\.collections)
+    nocase: true
+  snort_rule:
+    msg: CRITICAL HTTP Java Deserialization Attack Attempt
+    options: 'content:"|ac ed 00 05|"; '
+- pattern_id: PHP_CGI_INJECTION
+  name: PHP CGI Argument Injection
+  cve: CVE-2024-4577
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: regex
+    pattern: (?:GET|POST)\s+[^\s]*\?[^=\s]*(?:%AD|­|\xc2\xad)
+    nocase: true
+  snort_rule:
+    msg: CRITICAL PHP CGI Argument Injection (CVE-2024-4577)
+    options: 'content:"php-cgi"; http_uri; nocase; content:"="; distance:0; '
+- pattern_id: GRAPHQL_INJECTION
+  name: HTTP GraphQL Injection / Introspection Abuse
+  cve: ''
+  severity: MEDIUM
+  enabled: true
+  detection:
+    type: regex
+    pattern: ({\s*__schema|{\s*__type|mutation\s*{|query\s*{.*(?:union|exec|system|popen))
+    nocase: true
+  snort_rule:
+    msg: MEDIUM HTTP GraphQL Introspection / Injection Attempt
+    options: 'content:"__schema"; http_client_body; nocase; '
+- pattern_id: HTTP_PARAM_POLLUTION
+  name: HTTP Parameter Pollution
+  cve: ''
+  severity: MEDIUM
+  enabled: true
+  detection:
+    type: regex
+    pattern: ([?&](\w+)=[^&]*&\2=)|(%26\w+=)|([?&]\w+=[^&]*[?&]\w+=)
+    nocase: true
+  snort_rule:
+    msg: MEDIUM HTTP Parameter Pollution Attempt
+    options: 'content:"&id="; http_uri; nocase; content:"&id="; distance:0; nocase; '
+- pattern_id: XPATH_INJECTION
+  name: HTTP XPath Injection
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (/\*|' or '1'='1|or 1=1|string\(|concat\(|position\(|count\(|child::|\bnode\(\))
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP XPath Injection Attempt
+    options: 'content:"string("; http_uri; nocase; '
+- pattern_id: FILE_INCLUSION
+  name: HTTP Remote/Local File Inclusion
+  cve: ''
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: regex
+    pattern: (include|require|include_once|require_once)\s*[=(].*?(https?://|ftp://|php://|data://|zip://|expect://)
+    nocase: true
+  snort_rule:
+    msg: CRITICAL HTTP Remote File Inclusion Attempt
+    options: 'content:"include"; http_uri; nocase; content:"http://"; distance:0;
+      nocase; '
+- pattern_id: PROTOTYPE_POLLUTION
+  name: HTTP JavaScript Prototype Pollution
+  cve: ''
+  severity: HIGH
+  enabled: true
+  detection:
+    type: regex
+    pattern: (__proto__|constructor\[prototype\]|constructor\.prototype)
+    nocase: true
+  snort_rule:
+    msg: HIGH HTTP Prototype Pollution Attempt
+    options: 'content:"__proto__"; http_uri; nocase; '
+- pattern_id: ACTIVEMQ_RCE
+  name: Apache ActiveMQ Remote Code Execution
+  cve: CVE-2023-46604
+  severity: CRITICAL
+  enabled: true
+  detection:
+    type: regex
+    pattern: (ExceptionResponse|ClassPathXmlApplicationContext|activemq.*exploit|/api/jolokia)
+    nocase: true
+  snort_rule:
+    msg: CRITICAL Apache ActiveMQ RCE Attempt (CVE-2023-46604)
+    options: 'content:"ClassPathXmlApplicationContext"; nocase; '

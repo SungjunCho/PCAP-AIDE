@@ -1,227 +1,143 @@
-# =============================================================================
-# PCAP Analyzer — Noise Filter (오용탐지 예외처리)
-# =============================================================================
-#
-# 이 파일에 정의된 패턴과 일치하는 payload 는 분석에서 제외됩니다.
-# (Snort 룰 생성 없음 / 키워드 탐지 없음 / 자동학습 제외)
-#
-# global_whitelist.yaml 과의 차이
-# ─────────────────────────────────────────────────────────────────────────────
-# global_whitelist.yaml : 관리자가 직접 등록하는 "정상 트래픽" 허용 목록
-# noise_filter.yaml     : 의미 없는 payload 자동 제외 (노이즈/패딩/제어문자)
-#
-# 처리 순서 (protocol_rule_engine.py)
-# ─────────────────────────────────────────────────────────────────────────────
-#   0a단계: dst_port 443 차단
-#   0a-2단계: ★ 노이즈 필터 (이 파일) ← 여기서 제외
-#   0b단계: global_whitelist.yaml 대조
-#   1단계: keyword_rule_engine.py 탐지
-#   2단계: protocol_rule_engine.py 룰 생성
-#
-# 필드 설명
-# ─────────────────────────────────────────────────────────────────────────────
-# description : 사람이 읽기 위한 설명
-# check_type  : 판별 방식 (아래 참조)
-#   - min_length   : payload 길이가 value 이하이면 제외
-#   - null_ratio   : NULL(0x00) 바이트 비율이 value 이상이면 제외 (0.0~1.0)
-#   - repeat_byte  : 단일 바이트 반복 비율이 value 이상이면 제외 (0.0~1.0)
-#   - hex_prefix   : payload 가 이 hex 로 시작하면 제외
-#   - hex_exact    : payload 전체가 이 hex 와 일치하면 제외
-#   - text_exact   : payload(ascii 변환) 가 이 문자열과 완전 일치하면 제외
-#   - text_in      : payload 안에 이 문자열이 포함되면 제외 (단독 사용 주의)
-#   - pkcs_padding : PKCS#5/7 패딩 패턴 자동 감지 (value: true)
-#   - seq_pattern  : 연속 증가/감소 바이트 시퀀스 감지 (value: 최소길이)
-#   - non_printable_ratio: 비인쇄 문자 비율이 value 이상이면 제외 (0.0~1.0)
-# value       : 판별 기준 값
-# enabled     : false 이면 이 규칙 비활성화 (기본 true)
-# =============================================================================
-
-version: "1.0"
-
+version: '1.0'
 noise_rules:
-
-  # ── 섹션 1: 길이 기반 필터 ────────────────────────────────────────────────
-  - description: "payload 길이 8 bytes 이하 — 의미 있는 공격 패턴 불가능"
-    check_type: min_length
-    value: 8
-    enabled: true
-
-  # ── 섹션 2: NULL 바이트 반복 ─────────────────────────────────────────────
-  - description: "NULL(0x00) 바이트가 전체의 90% 이상 — 단순 패딩"
-    check_type: null_ratio
-    value: 0.90
-    enabled: true
-
-  # ── 섹션 3: 단일 바이트 반복 패턴 ────────────────────────────────────────
-  - description: "단일 바이트 반복 비율 95% 이상 — 패딩/노이즈 (FF, AA, 55 등)"
-    check_type: repeat_byte
-    value: 0.95
-    enabled: true
-
-  # ── 섹션 4: PKCS#5/7 패딩 자동 감지 ─────────────────────────────────────
-  - description: "PKCS#5/PKCS#7 스타일 패딩 — 암호화 프로토콜 종료 패딩"
-    check_type: pkcs_padding
-    value: true
-    enabled: true
-
-  # ── 섹션 5: 연속 증가·감소 시퀀스 ───────────────────────────────────────
-  - description: "연속 증가/감소 바이트 시퀀스 8개 이상 — 테스트 패킷"
-    check_type: seq_pattern
-    value: 8
-    enabled: true
-
-  # ── 섹션 6: 비인쇄 문자 과다 ─────────────────────────────────────────────
-  - description: "비인쇄 문자 비율 95% 이상이고 길이 16 bytes 이하 — 제어 노이즈"
-    check_type: non_printable_ratio
-    value: 0.95
-    min_length_threshold: 16   # 이 길이 이하에서만 적용 (긴 바이너리 페이로드 제외)
-    enabled: true
-
-  # ── 섹션 7: 알려진 heartbeat·control 단어 완전 일치 ──────────────────────
-  - description: "단순 heartbeat / 제어 명령 — 완전 일치 (대소문자 무시)"
-    check_type: text_exact_nocase
-    value: "PING"
-    enabled: true
-
-  - description: "단순 heartbeat / 제어 명령"
-    check_type: text_exact_nocase
-    value: "PONG"
-    enabled: true
-
-  - description: "단순 응답 코드"
-    check_type: text_exact_nocase
-    value: "OK"
-    enabled: true
-
-  - description: "단순 응답 코드"
-    check_type: text_exact_nocase
-    value: "ERR"
-    enabled: true
-
-  - description: "TCP/프로토콜 제어 단어"
-    check_type: text_exact_nocase
-    value: "ACK"
-    enabled: true
-
-  - description: "TCP/프로토콜 제어 단어"
-    check_type: text_exact_nocase
-    value: "NACK"
-    enabled: true
-
-  - description: "SMTP 인사 명령 (단독 payload)"
-    check_type: text_exact_nocase
-    value: "HELO"
-    enabled: true
-
-  - description: "SMTP 인사 명령 (단독 payload)"
-    check_type: text_exact_nocase
-    value: "EHLO"
-    enabled: true
-
-  - description: "프로토콜 무작동 명령"
-    check_type: text_exact_nocase
-    value: "NOOP"
-    enabled: true
-
-  - description: "프로토콜 종료 명령"
-    check_type: text_exact_nocase
-    value: "QUIT"
-    enabled: true
-
-  - description: "keepalive 신호"
-    check_type: text_exact_nocase
-    value: "keepalive"
-    enabled: true
-
-  - description: "heartbeat 신호"
-    check_type: text_exact_nocase
-    value: "heartbeat"
-    enabled: true
-
-  - description: "생존 신호"
-    check_type: text_exact_nocase
-    value: "ALIVE"
-    enabled: true
-
-  - description: "종료 신호"
-    check_type: text_exact_nocase
-    value: "DEAD"
-    enabled: true
-
-  - description: "테스트 payload"
-    check_type: text_exact_nocase
-    value: "TEST"
-    enabled: true
-
-  - description: "에코 명령"
-    check_type: text_exact_nocase
-    value: "ECHO"
-    enabled: true
-
-  - description: "TCP SYN 단어 (단독)"
-    check_type: text_exact_nocase
-    value: "SYN"
-    enabled: true
-
-  - description: "TCP FIN 단어 (단독)"
-    check_type: text_exact_nocase
-    value: "FIN"
-    enabled: true
-
-  - description: "TCP RST 단어 (단독)"
-    check_type: text_exact_nocase
-    value: "RST"
-    enabled: true
-
-  # ── 섹션 8: 제어 문자 반복 (hex_exact) ───────────────────────────────────
-  - description: "\\r\\n\\r\\n 만으로 구성된 payload — HTTP 빈 헤더 끝"
-    check_type: hex_exact
-    value: "0d0a0d0a"
-    enabled: true
-
-  - description: "\\r\\n 6회"
-    check_type: hex_exact
-    value: "0d0a0d0a0d0a"
-    enabled: true
-
-  - description: "\\r\\n 8회"
-    check_type: hex_exact
-    value: "0d0a0d0a0d0a0d0a"
-    enabled: true
-
-  - description: "ESC 문자 4회 반복"
-    check_type: hex_exact
-    value: "1b1b1b1b"
-    enabled: true
-
-  - description: "CR(0x0d) 4회 반복"
-    check_type: hex_exact
-    value: "0d0d0d0d"
-    enabled: true
-
-  - description: "SOH(0x01) 4회 반복 — 제어문자 노이즈"
-    check_type: hex_exact
-    value: "01010101"
-    enabled: true
-
-  - description: "STX(0x02) 4회 반복"
-    check_type: hex_exact
-    value: "02020202"
-    enabled: true
-
-  - description: "ETX(0x03) 4회 반복"
-    check_type: hex_exact
-    value: "03030303"
-    enabled: true
-
-  # ── 불규칙 문자열 필터 ──────────────────────────────────────────────────
-  # 암호화·랜덤·바이너리 데이터처럼 문자 조합이 심하게 불규칙한 payload 제외.
-  # 점수 계산 기준:
-  #   특수문자 비율 ×30 + 제어문자 비율 ×25 + 유니코드 카테고리 수 ×20
-  #   + 비알파벳/숫자 비율 ×15 + 대소문자전환 비율 ×10
-  # 불규칙 payload 평균: 38.8 / 정상 문자열 최댓값: 12.3
-  # value(임계값)를 낮출수록 더 많은 payload가 제외됩니다.
-  - description: "불규칙 문자열 — 암호화/랜덤/바이너리 payload (불규칙성 점수 ≥ 19)"
-    check_type: irregularity_score
-    value: 19
-    enabled: true
+- description: payload 길이 8 bytes 이하 — 의미 있는 공격 패턴 불가능
+  check_type: min_length
+  value: 8
+  enabled: true
+- description: NULL(0x00) 바이트가 전체의 90% 이상 — 단순 패딩
+  check_type: null_ratio
+  value: 0.9
+  enabled: true
+- description: 단일 바이트 반복 비율 95% 이상 — 패딩/노이즈 (FF, AA, 55 등)
+  check_type: repeat_byte
+  value: 0.95
+  enabled: true
+- description: PKCS#5/PKCS#7 스타일 패딩 — 암호화 프로토콜 종료 패딩
+  check_type: pkcs_padding
+  value: true
+  enabled: true
+- description: 연속 증가/감소 바이트 시퀀스 8개 이상 — 테스트 패킷
+  check_type: seq_pattern
+  value: 8
+  enabled: true
+- description: 비인쇄 문자 비율 95% 이상이고 길이 16 bytes 이하 — 제어 노이즈
+  check_type: non_printable_ratio
+  value: 0.95
+  min_length_threshold: 16
+  enabled: true
+- description: 단순 heartbeat / 제어 명령 — 완전 일치 (대소문자 무시)
+  check_type: text_exact_nocase
+  value: PING
+  enabled: true
+- description: 단순 heartbeat / 제어 명령
+  check_type: text_exact_nocase
+  value: PONG
+  enabled: true
+- description: 단순 응답 코드
+  check_type: text_exact_nocase
+  value: OK
+  enabled: true
+- description: 단순 응답 코드
+  check_type: text_exact_nocase
+  value: ERR
+  enabled: true
+- description: TCP/프로토콜 제어 단어
+  check_type: text_exact_nocase
+  value: ACK
+  enabled: true
+- description: TCP/프로토콜 제어 단어
+  check_type: text_exact_nocase
+  value: NACK
+  enabled: true
+- description: SMTP 인사 명령 (단독 payload)
+  check_type: text_exact_nocase
+  value: HELO
+  enabled: true
+- description: SMTP 인사 명령 (단독 payload)
+  check_type: text_exact_nocase
+  value: EHLO
+  enabled: true
+- description: 프로토콜 무작동 명령
+  check_type: text_exact_nocase
+  value: NOOP
+  enabled: true
+- description: 프로토콜 종료 명령
+  check_type: text_exact_nocase
+  value: QUIT
+  enabled: true
+- description: keepalive 신호
+  check_type: text_exact_nocase
+  value: keepalive
+  enabled: true
+- description: heartbeat 신호
+  check_type: text_exact_nocase
+  value: heartbeat
+  enabled: true
+- description: 생존 신호
+  check_type: text_exact_nocase
+  value: ALIVE
+  enabled: true
+- description: 종료 신호
+  check_type: text_exact_nocase
+  value: DEAD
+  enabled: true
+- description: 테스트 payload
+  check_type: text_exact_nocase
+  value: TEST
+  enabled: true
+- description: 에코 명령
+  check_type: text_exact_nocase
+  value: ECHO
+  enabled: true
+- description: TCP SYN 단어 (단독)
+  check_type: text_exact_nocase
+  value: SYN
+  enabled: true
+- description: TCP FIN 단어 (단독)
+  check_type: text_exact_nocase
+  value: FIN
+  enabled: true
+- description: TCP RST 단어 (단독)
+  check_type: text_exact_nocase
+  value: RST
+  enabled: true
+- description: \r\n\r\n 만으로 구성된 payload — HTTP 빈 헤더 끝
+  check_type: hex_exact
+  value: 0d0a0d0a
+  enabled: true
+- description: \r\n 6회
+  check_type: hex_exact
+  value: 0d0a0d0a0d0a
+  enabled: true
+- description: \r\n 8회
+  check_type: hex_exact
+  value: 0d0a0d0a0d0a0d0a
+  enabled: true
+- description: ESC 문자 4회 반복
+  check_type: hex_exact
+  value: 1b1b1b1b
+  enabled: true
+- description: CR(0x0d) 4회 반복
+  check_type: hex_exact
+  value: 0d0d0d0d
+  enabled: true
+- description: SOH(0x01) 4회 반복 — 제어문자 노이즈
+  check_type: hex_exact
+  value: '01010101'
+  enabled: true
+- description: STX(0x02) 4회 반복
+  check_type: hex_exact
+  value: '02020202'
+  enabled: true
+- description: ETX(0x03) 4회 반복
+  check_type: hex_exact
+  value: '03030303'
+  enabled: true
+- check_type: shannon_entropy
+  value: 6.5
+  enabled: true
+  description: Shannon Entropy ≥ 6.5 — 완전 암호화/랜덤 바이너리 payload (논문 3.2절 고임계값)
+- description: 불규칙 문자열 — 암호화/랜덤/바이너리 payload (불규칙성 점수 ≥ 19)
+  check_type: irregularity_score
+  value: 19
+  enabled: true
